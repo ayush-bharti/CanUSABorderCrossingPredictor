@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}Home - Border Crossing Predictor{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h4><i class="fas fa-clock"></i> Predict Border Crossing Wait Time</h4>
+            </div>
+            <div class="card-body">
+                {% if not status.model_loaded %}
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i> Model not loaded. Please train the model first.
+                </div>
+                {% endif %}
+                
+                <form id="prediction-form" method="post" action="{{ url_for('predict') }}">
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label for="date" class="form-label">Date</label>
+                            <select class="form-select" id="date" name="date" required>
+                                {% for date in date_options %}
+                                <option value="{{ date }}">{{ date }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="time" class="form-label">Time</label>
+                            <select class="form-select" id="time" name="time" required>
+                                {% for hour in hour_options %}
+                                <option value="{{ hour }}">{{ hour }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="current_wait" class="form-label">Current Wait Time (minutes, optional)</label>
+                            <input type="number" class="form-control" id="current_wait" name="current_wait" min="0" step="1">
+                        </div>
+                    </div>
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary" {% if not status.model_loaded %}disabled{% endif %}>
+                            <i class="fas fa-search"></i> Predict Wait Time
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <div id="prediction-results" class="card mb-4 d-none">
+            <div class="card-header bg-success text-white">
+                <h4><i class="fas fa-check-circle"></i> Prediction Results</h4>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5>Border Crossing: <span id="crossing-name"></span></h5>
+                        <h5>Date & Time: <span id="target-date"></span></h5>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="alert alert-info">
+                            <h4 class="alert-heading">Predicted Wait Time:</h4>
+                            <h2 id="predicted-wait-time" class="mb-0"></h2>
+                            <p class="mb-0">Range: <span id="wait-time-range"></span></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h4><i class="fas fa-info-circle"></i> About the Predictor</h4>
+            </div>
+            <div class="card-body">
+                <p>This tool predicts wait times at the Blaine Peace Arch border crossing between Vancouver and Seattle using Facebook's Prophet forecasting model.</p>
+                <p>The model takes into account:</p>
+                <ul>
+                    <li>Historical patterns by hour, day of week, and month</li>
+                    <li>Holiday effects for both US and Canada</li>
+                    <li>Current wait time (if provided)</li>
+                </ul>
+                <p>For more detailed visualizations of historical patterns, visit the <a href="{{ url_for('visualize') }}">Visualize</a> page.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.getElementById('prediction-form');
+        const resultsCard = document.getElementById('prediction-results');
+        
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Show loading state
+            const submitButton = form.querySelector('button[type="submit"]');
+            const originalButtonText = submitButton.innerHTML;
+            submitButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Predicting...';
+            submitButton.disabled = true;
+            
+            // Get form data
+            const formData = new FormData(form);
+            
+            // Send prediction request
+            fetch('{{ url_for("predict") }}', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Reset button
+                submitButton.innerHTML = originalButtonText;
+                submitButton.disabled = false;
+                
+                if (data.error) {
+                    // Show error
+                    alert('Error: ' + data.error);
+                } else {
+                    // Update results
+                    document.getElementById('crossing-name').textContent = data.crossing_name;
+                    document.getElementById('target-date').textContent = data.target_date;
+                    document.getElementById('predicted-wait-time').textContent = data.predicted_wait_time_formatted;
+                    document.getElementById('wait-time-range').textContent = 
+                        `${Math.round(data.lower_bound)} - ${Math.round(data.upper_bound)} minutes`;
+                    
+                    // Show results
+                    resultsCard.classList.remove('d-none');
+                    
+                    // Scroll to results
+                    resultsCard.scrollIntoView({ behavior: 'smooth' });
+                }
+            })
+            .catch(error => {
+                // Reset button
+                submitButton.innerHTML = originalButtonText;
+                submitButton.disabled = false;
+                
+                // Show error
+                alert('Error: ' + error.message);
+            });
+        });
+    });
+</script>
+{% endblock %}
