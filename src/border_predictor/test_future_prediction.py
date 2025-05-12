@@ -96,7 +96,7 @@ if __name__ == "__main__":
     
     # Also check predictions for various times of the day
     print("\nPredictions throughout tomorrow:")
-    times = [8, 12, 17, 20]  # Hours to check (8am, noon, 5pm, 8pm)
+    times = [6, 8, 12, 17, 20]  # Hours to check (6am, 8am, noon, 5pm, 8pm)
     
     for hour in times:
         target_time = tomorrow_noon.replace(hour=hour)
