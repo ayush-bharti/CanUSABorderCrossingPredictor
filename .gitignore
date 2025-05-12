@@ -23,10 +23,10 @@ ENV/
 .ipynb_checkpoints
 
 # Data files
-data/*.csv
-data/*.xlsx
-data/*.json
-!data/.gitkeep
+# data/*.csv
+# data/*.xlsx
+# data/*.json
+# !data/.gitkeep
 
 # Model files
 models/*.pkl
@@ -42,3 +42,6 @@ models/*.joblib
 # OS specific files
 .DS_Store
 Thumbs.db
+
+#Output files
+output/
