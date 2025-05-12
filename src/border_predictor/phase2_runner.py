@@ -9,7 +9,7 @@ import pickle
 from datetime import datetime, timedelta
 
 from border_predictor.data.data_loader import load_processed_data
-from border_predictor.data.live_data_loader import (
+from border_predictor.data.live_data_loader_updated import (
     get_current_wait_time,
     prepare_live_data_for_model,
     save_live_data

@@ -43,6 +43,8 @@ class BorderProphetModel:
             daily_seasonality=self.config["daily_seasonality"],
             weekly_seasonality=self.config["weekly_seasonality"],
             yearly_seasonality=self.config["yearly_seasonality"],
+            # Add growth and bound parameters to prevent negative predictions
+            growth='logistic'
         )
         
         # Add country holidays
@@ -64,16 +66,28 @@ class BorderProphetModel:
         # Add any additional regressors here if needed
         # Example: self.model.add_regressor('is_weekend')
         
-        # Fit the model
-        self.model.fit(df)
+        # For logistic growth, we need to set cap (upper bound) and floor (lower bound)
+        # Cap should be significantly higher than max observed value
+        max_wait_time = df['y'].max()
+        cap_value = max(120, max_wait_time * 2)  # Use at least 120 mins or 2x max value
         
-        print(f"Model fitted on {len(df)} data points.")
+        # Create a copy of the dataframe with cap and floor columns
+        df_with_bounds = df.copy()
+        df_with_bounds['cap'] = cap_value
+        df_with_bounds['floor'] = 0  # Wait times can't go below 0
+        
+        # Fit the model
+        self.model.fit(df_with_bounds)
+        
+        print(f"Model fitted on {len(df)} data points with cap={cap_value} and floor=0.")
     
     def predict(
         self, 
         periods: Optional[int] = None, 
         future_df: Optional[pd.DataFrame] = None,
-        include_history: bool = False
+        include_history: bool = False,
+        cap_value: Optional[float] = None,
+        floor_value: float = 0.0
     ) -> pd.DataFrame:
         """
         Generate predictions using the fitted model.
@@ -82,6 +96,8 @@ class BorderProphetModel:
             periods: Number of future periods to predict. Ignored if future_df is provided.
             future_df: Optional DataFrame with future dates for prediction.
             include_history: Whether to include historical predictions.
+            cap_value: Maximum possible value for predictions. If None, uses 2x the max value from training.
+            floor_value: Minimum possible value for predictions. Default is 0.
         
         Returns:
             DataFrame with predictions.
@@ -92,16 +108,29 @@ class BorderProphetModel:
         if self.model is None:
             raise ValueError("Model has not been fitted. Call fit() first.")
         
+        # Create future DataFrame if not provided
         if future_df is None:
-            # Create future dataframe
             if periods is None:
-                periods = self.config["forecast_horizon_days"] * 24  # Convert days to hours
+                periods = self.config["forecast_horizon_days"] * 24
             
             future_df = self.model.make_future_dataframe(
                 periods=periods,
                 freq=self.config["forecast_frequency"],
                 include_history=include_history
             )
+            
+        # For logistic growth, add cap and floor values
+        if 'cap' not in future_df.columns:
+            # Get the cap value used during training if not specified
+            if cap_value is None and hasattr(self.model, 'history') and 'cap' in self.model.history.columns:
+                cap_value = self.model.history['cap'].max()
+            elif cap_value is None:
+                cap_value = 120  # Default fallback
+                
+            future_df['cap'] = cap_value
+            
+        if 'floor' not in future_df.columns:
+            future_df['floor'] = floor_value
         
         # Make predictions
         forecast = self.model.predict(future_df)

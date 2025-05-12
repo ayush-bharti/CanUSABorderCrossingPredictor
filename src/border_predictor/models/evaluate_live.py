@@ -10,7 +10,7 @@ import os
 
 from border_predictor.config.config import MODEL_CONFIG, DATA_CONFIG, LIVE_DATA_CONFIG, BORDER_CONFIG
 from border_predictor.models.prophet_model import BorderProphetModel
-from border_predictor.data.live_data_loader import get_current_wait_time, prepare_live_data_for_model, save_live_data
+from border_predictor.data.live_data_loader_updated import get_current_wait_time, prepare_live_data_for_model, save_live_data
 
 
 def load_model(model_path: Optional[Path] = None) -> BorderProphetModel:
@@ -74,13 +74,15 @@ def evaluate_with_live_data(
     
     # Get current wait time
     try:
-        current_wait_time = get_current_wait_time(
+        port_name = BORDER_CONFIG.get("port_name", "Blaine")
+        current_wait_time, crossing_info = get_current_wait_time(
+            port_name=port_name,
             crossing_name=crossing_name,
             lane_type=lane_type,
             api_url=api_url
         )
         
-        print(f"Current wait time at {crossing_name} ({lane_type} lanes): {current_wait_time} minutes")
+        print(f"Current wait time at {crossing_info.get('crossing_name', crossing_name)} ({lane_type} lanes): {current_wait_time} minutes")
         
         # Prepare live data for model
         live_df = prepare_live_data_for_model(current_wait_time)
@@ -96,9 +98,30 @@ def evaluate_with_live_data(
         # Make predictions
         forecast = model.predict(future_df=future_df, include_history=True)
         
+        # Get prediction for current hour
+        now = datetime.now()
+        current_hour = now.replace(minute=0, second=0, microsecond=0)
+        predictions = forecast[forecast['ds'] == pd.Timestamp(current_hour)]
+        
+        # If no prediction for exact current hour, use the hour average
+        if len(predictions) > 0:
+            current_prediction = predictions['yhat'].values[0]
+        else:
+            # Fallback to same hour predictions if available
+            hour_predictions = forecast[forecast['ds'].dt.hour == now.hour]
+            if len(hour_predictions) > 0:
+                current_prediction = hour_predictions['yhat'].mean()
+            else:
+                # Ultimate fallback - use the mean of all predictions
+                current_prediction = forecast['yhat'].mean()
+        
+        # Ensure prediction is non-negative
+        if current_prediction < 0:
+            current_prediction = 0
+        
         # Evaluate the current prediction
         actual = current_wait_time
-        predicted = forecast.loc[forecast['ds'].dt.hour == now.hour, 'yhat'].mean()
+        predicted = current_prediction
         error = abs(actual - predicted)
         
         print(f"Actual wait time: {actual} minutes")
