@@ -21,6 +21,13 @@ DATA_CONFIG = {
     "monthly_data_path": DATA_DIR / "monthly_converted_data.csv",
 }
 
+LIVE_DATA_CONFIG = {
+    "api_url": "https://bwt.cbp.gov/api/waittimes",
+    "refresh_interval_minutes": 15,
+    "max_retries": 3,
+    "retry_delay_seconds": 5,
+}
+
 # Model configuration
 MODEL_CONFIG = {
     "model_path": MODELS_DIR / "prophet_model.pkl",
@@ -31,14 +38,16 @@ MODEL_CONFIG = {
     "holidays_prior_scale": 10.0,
     "daily_seasonality": True,
     "weekly_seasonality": True,
-    "yearly_seasonality": True,
+    "yearly_seasonality": False,  # Removed yearly seasonality as requested
 }
 
 # Border crossing specific configuration
 BORDER_CONFIG = {
-    "crossing_name": "Blaine Peace Arch",
+    "port_name": "Blaine",
+    "crossing_name": "Peace Arch",
     "direction": "both",  # "northbound", "southbound", or "both"
     "countries": ["US", "Canada"],
+    "lane_type": "standard",  # Default lane type for fetching live data
 }
 
 # Web application configuration

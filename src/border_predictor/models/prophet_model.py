@@ -144,8 +144,7 @@ class BorderProphetModel:
         
         # Perform cross-validation
         cv_results = cross_validation(
-            model=self.model,
-            df=df,
+            self.model,
             initial=initial,
             period=period,
             horizon=horizon

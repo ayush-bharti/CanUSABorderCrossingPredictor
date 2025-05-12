@@ -1,0 +1,81 @@
+port_name,crossing_name,border,port_status,hours,std_wait_min,std_update_time,nexus_wait_min,nexus_update_time
+Alexandria Bay,Thousand Islands Bridge,Canadian Border,Open,24 hrs/day,0,At 11:00 pm EDT,,
+Blaine,Pacific Highway,Canadian Border,Open,24 hrs/day,5,At 8:00 pm PDT,0,At 8:00 pm PDT
+Blaine,Peace Arch,Canadian Border,Open,24 hrs/day,15,At 8:00 pm PDT,5,At 8:00 pm PDT
+Blaine,Point Roberts,Canadian Border,Open,24 hrs/day,,,,
+Buffalo/Niagara Falls,Lewiston Bridge,Canadian Border,Open,24 hrs/day,8,At 11:30 pm EDT,,
+Buffalo/Niagara Falls,Peace Bridge,Canadian Border,Open,24 hrs/day,1,At 11:30 pm EDT,,
+Buffalo/Niagara Falls,Rainbow Bridge,Canadian Border,Open,24 hrs/day,10,At 11:30 pm EDT,,
+Buffalo/Niagara Falls,Whirlpool Bridge,Canadian Border,Open,7 am-11 pm,,,,
+Calais,Ferry Point,Canadian Border,Open,24 hrs/day,0,At 11:00 pm EDT,,
+Calais,International Avenue,Canadian Border,Open,24 hrs/day,0,At 11:00 pm EDT,,
+Calais,Milltown,Canadian Border,Closed,8 am-4 pm,,,,
+Champlain,,Canadian Border,Open,24 hrs/day,0,At 11:00 pm EDT,,
+Derby Line,Derby Line I 91,Canadian Border,Open,24 hrs/day,0,At 11:00 pm EDT,,
+Detroit,Ambassador Bridge,Canadian Border,Open,24 hrs/day,0,At 11:00 pm EDT,,
+Detroit,Windsor Tunnel,Canadian Border,Open,24 hrs/day,0,At 11:00 pm EDT,,
+Highgate Springs,,Canadian Border,Open,24 hrs/day,0,At 11:00 pm EDT,,
+Houlton,,Canadian Border,Open,24 hrs/day,0,At 11:00 pm EDT,,
+International Falls,,Canadian Border,Open,24 hrs/day,0,At 11:00 pm CDT,,
+Jackman,,Canadian Border,Open,24 hrs/day,0,At 11:00 pm EDT,,
+Lynden,,Canadian Border,Open,8 am-Midnight,0,At 8:00 pm PDT,,
+Madawaska,,Canadian Border,Open,24 hrs/day,0,At 11:00 pm EDT,,
+Massena,,Canadian Border,Open,24 hrs/day,0,At 8:00 pm EDT,,
+Norton,,Canadian Border,Open,24 hrs/day,0,At 11:00 pm EDT,,
+Ogdensburg,,Canadian Border,Open,24 hrs/day,0,At 9:00 pm EDT,,
+Pembina,,Canadian Border,Open,24 hrs/day,0,At 7:00 pm CDT,,
+Port Huron,Bluewater Bridge,Canadian Border,Open,24 hrs/day,0,At 11:00 pm EDT,,
+Sault Ste. Marie,International Bridge   SSM,Canadian Border,Open,24 hrs/day,0,At 10:00 pm EDT,,
+Sumas,,Canadian Border,Open,24 hrs/day,0,At 9:00 pm PDT,,
+Sweetgrass,,Canadian Border,Open,24 hrs/day,0,At 9:00 pm MDT,,
+Andrade,,Mexican Border,Open,6 am-10 pm,90,At 7:00 pm PDT,,
+BOTA CARGO FACILITY,BRIDGE OF AMERICAS CARGO FACILITY ,Mexican Border,Closed,6 am-2 pm,,,,
+Bridge of the Americas Port of Entry,,Mexican Border,Open,24 hrs/day,,,,
+Brownsville,B&M,Mexican Border,Open,24 hrs/day,20,At 10:00 pm CDT,,
+Brownsville,Gateway,Mexican Border,Open,24 hrs/day,60,At 10:00 pm CDT,,
+Brownsville,Los Indios,Mexican Border,Open,6 am-10 pm,,,,
+Brownsville,Veterans International,Mexican Border,Open,6 am-Midnight,120,At 10:00 pm CDT,0,At 10:00 pm CDT
+Calexico,East,Mexican Border,Open,6 am-10 pm,120,At 8:00 pm PDT,20,At 8:00 pm PDT
+Calexico,West,Mexican Border,Open,24 hrs/day,120,At 8:00 pm PDT,25,At 8:00 pm PDT
+Columbus,,Mexican Border,Open,24 hrs/day,10,At 9:00 pm MDT,,
+Del Rio,,Mexican Border,Open,24 hrs/day,45,At 10:00 pm CDT,0,At 10:00 pm CDT
+Douglas (Raul Hector Castro),,Mexican Border,Open,24 hrs/day,20,At 8:00 pm PST,2,At 8:00 pm PST
+Eagle Pass,Bridge I,Mexican Border,Open,7 am-11 pm,,,,
+Eagle Pass,Bridge II,Mexican Border,Open,24 hrs/day,110,At 10:00 pm CDT,1,At 10:00 pm CDT
+El Paso,Bridge of the Americas (BOTA),Mexican Border,Open,24 hrs/day,60,At 9:00 pm MDT,,
+El Paso,Paso Del Norte (PDN),Mexican Border,Open,24 hrs/day,45,At 9:00 pm MDT,3,At 9:00 pm MDT
+El Paso,Stanton DCL,Mexican Border,Open,6 am-Midnight,,,5,At 9:00 pm MDT
+El Paso,Ysleta,Mexican Border,Open,24 hrs/day,60,At 9:00 pm MDT,1,At 9:00 pm MDT
+Fort Hancock,Fort Hancock,Mexican Border,Closed,6 am-6 pm,5,At 5:00 pm MDT,,
+Gateway,,Mexican Border,Open,24 hrs/day,,,,
+Hidalgo/Pharr,Anzalduas International Bridge,Mexican Border,Open,6 am-10 pm,1,At 9:00 pm CDT,,
+Hidalgo/Pharr,Hidalgo,Mexican Border,Open,24 hrs/day,45,At 10:00 pm CDT,0,At 10:00 pm CDT
+Hidalgo/Pharr,Pharr,Mexican Border,Open,6 am-Midnight,120,At 10:00 pm CDT,,
+Laredo,Bridge I,Mexican Border,Open,24 hrs/day,,,5,At 10:00 pm CDT
+Laredo,Bridge II,Mexican Border,Open,24 hrs/day,5,At 10:00 pm CDT,,
+Laredo,Colombia Solidarity,Mexican Border,Open,8 am-Midnight,0,At 10:00 pm CDT,0,At 10:00 pm CDT
+Laredo,World Trade Bridge,Mexican Border,Open,7 am-Midnight,,,,
+Lukeville,,Mexican Border,Closed,6 am-8 pm,15,At 3:00 pm MST,,
+Marcelino Serna,Tornillo,Mexican Border,Open,6 am-10 pm,15,At 9:00 pm MDT,,
+Naco,,Mexican Border,Open,24 hrs/day,,,,
+Naco,,Mexican Border,Open,6 am-10 pm,10,At 8:00 pm PST,,
+Nogales,Deconcini,Mexican Border,Open,24 hrs/day,60,At 8:00 pm MST,45,At 8:00 pm MST
+Nogales,Mariposa,Mexican Border,Open,6 am-10 pm,60,At 8:00 pm MST,,
+Nogales,Morley Gate,Mexican Border,Closed,10 am-6 pm,,,,
+Otay Mesa,Commercial,Mexican Border,Open,6 am-10 pm,,,,
+Otay Mesa,Passenger,Mexican Border,Open,24 hrs/day,140,At 8:00 pm PDT,30,At 8:00 pm PDT
+Paso Del Norte,,Mexican Border,Open,24 hrs/day,,,,
+Presidio,,Mexican Border,Open,24 hrs/day,0,At 10:00 pm CDT,,
+Progreso,Donna International Bridge,Mexican Border,Open,6 am-10 pm,15,At 9:00 pm CDT,,
+Progreso,Progreso International Bridge,Mexican Border,Open,24 hrs/day,30,At 9:00 pm CDT,,
+Progreso - Progreso International Bridge,,Mexican Border,Open,24 hrs/day,,,,
+Rio Grande City,,Mexican Border,Open,7 am-Midnight,30,At 8:00 pm CDT,,
+Roma,,Mexican Border,Open,24 hrs/day,0,At 10:00 pm CDT,,
+ROMA TEXAS,ROMA TEXAS ,Mexican Border,Open,24 hrs/day,,,,
+San Luis,San Luis I,Mexican Border,Open,24 hrs/day,120,At 8:00 pm MST,90,At 8:00 pm MST
+San Luis,San Luis II,Mexican Border,Closed,9 am-5 pm,,,,
+San Ysidro,,Mexican Border,Open,24 hrs/day,100,At 6:00 pm PDT,15,At 6:00 pm PDT
+San Ysidro,Cross Border Express,Mexican Border,Open,24 hrs/day,,,,
+San Ysidro,PedWest,Mexican Border,Closed,6 am-2 pm,,,,
+Santa Teresa,Santa Teresa Port of Entry,Mexican Border,Open,6 am-10 pm,,,,
+Tecate,,Mexican Border,Open,6 am-10 pm,110,At 7:00 pm PDT,,
