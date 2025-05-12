@@ -1,6 +1,7 @@
 """Script to test model predictions for future dates and times."""
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 from datetime import datetime, timedelta
 import pickle
 from pathlib import Path
@@ -67,13 +68,16 @@ def predict_for_specific_time(model, target_datetime, display_range_hours=12):
                    label=f'Target Time: {yhat:.2f} mins')
     
     plt.title(f'Border Wait Time Predictions Around {target_datetime}')
-    plt.xlabel('Date')
+    plt.xlabel('Date and Time')
     plt.ylabel('Wait Time (minutes)')
+    plt.gcf().autofmt_xdate()  # Auto-format dates for better readability
+    date_format = mdates.DateFormatter('%Y-%m-%d %H:%M')
+    plt.gca().xaxis.set_major_formatter(date_format)
+    
     plt.legend()
     plt.grid(True, alpha=0.3)
     
     # Format x-axis for better readability
-    plt.xticks(rotation=45)
     plt.tight_layout()
     
     return forecast, plt.gcf()
