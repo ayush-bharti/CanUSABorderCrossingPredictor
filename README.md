@@ -43,7 +43,43 @@ pip install -r requirements.txt
 
 ## Usage
 
-[Instructions will be added as the project develops]
+### Training the Model
+
+```bash
+# Train the model using historical data
+python -m border_predictor.models.train_model
+
+# Evaluate the model against live data
+python -m border_predictor.models.evaluate_live
+```
+
+### Making Predictions
+
+```bash
+# Predict wait times for specific future dates and times
+python -m border_predictor.test_future_prediction
+
+# Test the model with live data from the CBP API
+python -m border_predictor.test_updated_live_data
+```
+
+### Visualization and Analysis
+
+The prediction outputs include:
+- Wait time prediction in minutes
+- 95% confidence intervals for predictions
+- Visualizations of predictions with time series graphs
+
+### Web Interface
+
+A Flask-based web interface is available for interactive predictions:
+
+```bash
+# Start the web server
+python -m border_predictor.app
+```
+
+Then navigate to http://localhost:5000 in your browser to access the interface.
 
 ## Data Sources
 
