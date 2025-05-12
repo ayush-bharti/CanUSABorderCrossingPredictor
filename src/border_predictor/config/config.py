@@ -14,9 +14,11 @@ MODELS_DIR.mkdir(exist_ok=True)
 
 # Data configuration
 DATA_CONFIG = {
+    "data_dir": DATA_DIR,
     "historical_data_path": DATA_DIR / "historical_wait_times.csv",
     "current_data_path": DATA_DIR / "current_wait_times.csv",
     "processed_data_path": DATA_DIR / "processed_data.csv",
+    "monthly_data_path": DATA_DIR / "monthly_converted_data.csv",
 }
 
 # Model configuration

@@ -4,6 +4,9 @@ import os
 import pandas as pd
 import numpy as np
 from pathlib import Path
+import re
+import glob
+import calendar
 
 from border_predictor.config.config import DATA_CONFIG
 
@@ -202,13 +205,173 @@ def save_processed_data(df: pd.DataFrame, file_path: Optional[Path] = None) -> N
     if file_path is None:
         file_path = DATA_CONFIG["processed_data_path"]
     
-    # Ensure directory exists
+    # Create parent directory if it doesn't exist
     file_path.parent.mkdir(parents=True, exist_ok=True)
     
-    # Save data
-    df.to_csv(file_path, index=False)
+    # Save data based on file extension
+    if file_path.suffix.lower() == '.csv':
+        df.to_csv(file_path, index=False)
+    elif file_path.suffix.lower() in ['.xlsx', '.xls']:
+        df.to_excel(file_path, index=False)
+    else:
+        raise ValueError(f"Unsupported file format: {file_path.suffix}")
+
+
+def convert_monthly_data_to_prophet_format(
+    data_dir: Optional[Path] = None, 
+    reference_year: int = 2023,
+    save_path: Optional[Path] = None
+) -> pd.DataFrame:
+    """
+    Convert monthly wait time data files to Prophet format.
     
-    print(f"Processed data saved to {file_path}")
+    The monthly files are expected to have the following format:
+    - First column: Time of day (Midnight, 1:00 AM, etc.)
+    - Other columns: Days of week (Sunday, Monday, etc.)
+    - Values: Average wait times in minutes
+    
+    Args:
+        data_dir: Directory containing monthly CSV files. If None, uses DATA_DIR.
+        reference_year: Year to assign to the data (since original data are averages).
+        save_path: Optional path to save the converted data.
+        
+    Returns:
+        DataFrame in Prophet format with 'ds' (datetime) and 'y' (wait time) columns.
+    """
+    if data_dir is None:
+        data_dir = DATA_CONFIG.get("data_dir", Path(os.path.dirname(DATA_CONFIG["historical_data_path"])))
+    
+    # Map month names to numbers
+    month_map = {
+        'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'June': 6,
+        'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12
+    }
+    
+    # Map day of week to numbers (0=Monday in pandas)
+    day_map = {
+        'Monday': 0, 'Tuesday': 1, 'Wednesday': 2, 'Thursday': 3, 
+        'Friday': 4, 'Saturday': 5, 'Sunday': 6
+    }
+    
+    # Reverse day mapping for lookup by number
+    day_name_map = {v: k for k, v in day_map.items()}
+    
+    # Find all monthly data files
+    monthly_files = list(data_dir.glob("*_WaitTimes.csv"))
+    if not monthly_files:
+        raise FileNotFoundError(f"No monthly wait time files found in {data_dir}")
+    
+    all_data = []
+    
+    for file_path in monthly_files:
+        # Extract month from filename
+        month_match = re.search(r'(\w+)_WaitTimes', file_path.name)
+        if not month_match:
+            print(f"Warning: Could not determine month from {file_path.name}, skipping...")
+            continue
+            
+        month_name = month_match.group(1)
+        if month_name not in month_map:
+            print(f"Warning: Unknown month '{month_name}' from {file_path.name}, skipping...")
+            continue
+        
+        month_num = month_map[month_name]
+        
+        try:
+            # Read the CSV file
+            df = pd.read_csv(file_path)
+            
+            # Create a lookup dictionary with wait times for each hour and day of week
+            wait_time_lookup = {}
+            
+            # Process each row (time of day) once to build the lookup table
+            for _, row in df.iterrows():
+                time_str = row['Time']
+                
+                # Parse time string to hour
+                hour = None
+                if 'Midnight' in time_str:
+                    hour = 0
+                elif 'Noon' in time_str:
+                    hour = 12
+                else:
+                    match = re.search(r'(\d+):00\s*([AP]M)', time_str)
+                    if match:
+                        hour = int(match.group(1))
+                        am_pm = match.group(2)
+                        if am_pm == 'PM' and hour != 12:
+                            hour += 12
+                        elif am_pm == 'AM' and hour == 12:
+                            hour = 0
+                
+                if hour is None:
+                    print(f"Warning: Could not parse time '{time_str}', skipping...")
+                    continue
+                
+                # Process each day of week
+                for day_col in df.columns:
+                    if '(min)' not in day_col:
+                        continue
+                    
+                    day_name = day_col.split(' ')[0]
+                    day_num = day_map.get(day_name)
+                    if day_num is None:
+                        print(f"Warning: Unknown day format '{day_name}', skipping...")
+                        continue
+                    
+                    wait_time = row[day_col]
+                    wait_time_lookup[(hour, day_num)] = wait_time
+            
+            # Now generate entries for every day in the calendar month
+            month_days = calendar.monthrange(reference_year, month_num)[1]
+            
+            # For each day in the month
+            for day in range(1, month_days + 1):
+                # Get the day of week for this specific calendar date
+                date = pd.Timestamp(year=reference_year, month=month_num, day=day)
+                day_of_week = date.dayofweek
+                
+                # For each hour of the day
+                for hour in range(24):
+                    # Look up the wait time for this hour and day of week
+                    wait_time = wait_time_lookup.get((hour, day_of_week))
+                    
+                    if wait_time is not None:
+                        # Create timestamp for this specific date and hour
+                        timestamp = pd.Timestamp(
+                            year=reference_year, 
+                            month=month_num, 
+                            day=day,
+                            hour=hour
+                        )
+                        
+                        all_data.append({
+                            'ds': timestamp,
+                            'y': wait_time,
+                            'month': month_num,
+                            'day_of_week': day_of_week,
+                            'hour': hour,
+                            'day': day
+                        })
+                    else:
+                        print(f"Warning: No wait time found for hour {hour}, day of week {day_name_map.get(day_of_week, day_of_week)} in {month_name}")
+        except Exception as e:
+            print(f"Error processing file {file_path}: {str(e)}")
+    
+    # Convert to DataFrame and sort by datetime
+    result_df = pd.DataFrame(all_data)
+    if result_df.empty:
+        raise ValueError("No data could be processed from the monthly files")
+        
+    result_df = result_df.sort_values('ds').reset_index(drop=True)
+    
+    # Save if requested
+    if save_path is not None:
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        result_df.to_csv(save_path, index=False)
+        print(f"Converted data saved to {save_path}")
+    
+    return result_df
 
 
 def load_processed_data(file_path: Optional[Path] = None) -> pd.DataFrame:
