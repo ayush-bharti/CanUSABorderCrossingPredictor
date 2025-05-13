@@ -10,7 +10,7 @@ import os
 
 from border_predictor.config.config import MODEL_CONFIG, DATA_CONFIG, LIVE_DATA_CONFIG, BORDER_CONFIG
 from border_predictor.models.prophet_model import BorderProphetModel
-from border_predictor.data.live_data_loader_updated import get_current_wait_time, prepare_live_data_for_model, save_live_data
+from border_predictor.data.live_data_loader import get_current_wait_time, prepare_live_data_for_model, save_live_data
 
 
 def load_model(model_path: Optional[Path] = None) -> BorderProphetModel:

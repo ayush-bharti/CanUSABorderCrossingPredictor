@@ -6,7 +6,8 @@ A machine learning model to predict wait times at the Blaine Peace Arch border c
 
 This project uses Facebook's Prophet library to predict border crossing wait times based on:
 - Historical average wait times by month, day, and time
-- Current border wait time
+- Live border wait times (collected every 15 minutes)
+- Continuous model fine-tuning with real-time data
 - Holiday information for both US and Canada
 - Additional features that may impact border traffic
 
@@ -43,24 +44,30 @@ pip install -r requirements.txt
 
 ## Usage
 
-### Training the Model
+### Training and Fine-tuning the Model
 
 ```bash
-# Train the model using historical data
+# Train the initial model using historical data
 python -m border_predictor.models.train_model
 
-# Evaluate the model against live data
+# Start live data collection and model fine-tuning
+python -m border_predictor.models.live_model_tuner
+
+# Evaluate model performance with live data
 python -m border_predictor.models.evaluate_live
 ```
+
+The model automatically:
+- Collects live wait times every 15 minutes
+- Fine-tunes itself when sufficient new data is available
+- Benchmarks predictions against actual wait times
+- Adjusts hyperparameters based on performance
 
 ### Making Predictions
 
 ```bash
 # Predict wait times for specific future dates and times
 python -m border_predictor.test_future_prediction
-
-# Test the model with live data from the CBP API
-python -m border_predictor.test_updated_live_data
 ```
 
 ### Visualization and Analysis

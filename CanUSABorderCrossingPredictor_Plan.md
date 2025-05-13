@@ -29,16 +29,37 @@
 
 ## Phase 3: Model Enhancement
 
-### Feature Engineering
-- Add additional regressors if available (weather, events, etc.)
-- Create custom seasonality features if needed
-- Incorporate current wait time as a regressor
+### Live Data Integration
+- Implement 15-minute interval data collection from CBP API
+- Create data pipeline for continuous model fine-tuning
+- Develop real-time model performance benchmarking
+- Set up automated model retraining with new data
+- Implement data storage and archival system
 
-### Hyperparameter Tuning
-- Optimize changepoint_prior_scale (controls flexibility of trend)
-- Tune seasonality_prior_scale (controls flexibility of seasonality)
-- Adjust holidays_prior_scale (controls impact of holidays)
-- Cross-validate different parameter combinations
+### Weather Data Integration
+- Add weather data as additional regressors
+  - Temperature
+  - Precipitation
+  - Visibility
+- Implement weather data collection pipeline
+- Create feature transformations for weather data
+- Evaluate impact of weather features on predictions
+
+### Enhanced Holiday Effects
+- Implement extended holiday windows (pre/post effects)
+- Configure holiday-specific parameters
+- Add custom holiday events
+  - Major shopping events
+  - School breaks
+  - Local events
+- Fine-tune holiday impact scales
+
+### Model Fine-tuning
+- Optimize changepoint_prior_scale for trend flexibility
+- Tune seasonality_prior_scale for seasonal patterns
+- Adjust holidays_prior_scale for holiday impacts
+- Implement automated cross-validation pipeline
+- Monitor and adjust hyperparameters based on live data
 
 ## Phase 4: Application Development
 

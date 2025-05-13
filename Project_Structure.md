@@ -25,16 +25,17 @@ CanUSABorderCrossingPredictor/
 │       ├── data/                   # Data processing modules
 │       │   ├── __init__.py
 │       │   ├── data_loader.py      # Historical data loading utilities
-│       │   └── live_data_loader*.py # Live data API integration
+│       │   └── live_data_loader.py  # Live data API integration (JSON-based)
 │       ├── models/                 # Model implementation
 │       │   ├── __init__.py
 │       │   ├── prophet_model.py    # Prophet model implementation
 │       │   ├── train_model.py      # Model training script
+│       │   ├── live_model_tuner.py # Live data fine-tuning system
 │       │   └── evaluate_live.py    # Live evaluation script
 │       ├── utils/                  # Helper utilities
 │       │   ├── __init__.py
 │       │   └── helpers.py          # Common helper functions
-│       └── test_*.py               # Various test scripts
+│       ├── test_future_prediction.py # Future prediction testing
 │
 ├── static/                         # Static web assets
 │   ├── css/                        # CSS stylesheets
@@ -110,7 +111,7 @@ Key steps:
 - Generate predictions with confidence intervals
 - Apply floor (0) and cap constraints to ensure realistic predictions
 
-### 3. Live Evaluation Workflow
+### 4. Live Evaluation Workflow
 
 ```
 live_data_loader.py → evaluate_live.py → Evaluation metrics
