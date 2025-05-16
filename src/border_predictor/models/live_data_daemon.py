@@ -49,9 +49,10 @@ class LiveDataDaemon:
         self.running = False
     
     def run(self) -> None:
-        """Run the daemon process."""
+        """Run the daemon process with signal-safe sleep intervals."""
         self.running = True
         collection_count = 0
+        SLEEP_INTERVAL = 15  # 15-second intervals for better signal handling
         
         logger.info("Starting live data collection daemon...")
         logger.info(f"Collection interval: {self.collection_interval//60} minutes")
@@ -74,9 +75,17 @@ class LiveDataDaemon:
                 time_since_last = (current_time - last_collection).total_seconds()
                 
                 if time_since_last < self.collection_interval:
-                    sleep_time = max(1, self.collection_interval - time_since_last)
-                    logger.debug(f"Waiting {sleep_time:.1f} seconds until next collection")
-                    time.sleep(sleep_time)
+                    # Break down sleep into smaller intervals for better signal handling
+                    sleep_remaining = max(1, self.collection_interval - time_since_last)
+                    logger.debug(f"Waiting {sleep_remaining:.1f} seconds until next collection")
+                    
+                    while sleep_remaining > 0 and self.running:
+                        sleep_chunk = min(SLEEP_INTERVAL, sleep_remaining)
+                        time.sleep(sleep_chunk)
+                        sleep_remaining -= sleep_chunk
+                        
+                    if not self.running:
+                        break
                     continue
                 
                 collection_start = current_time
