@@ -133,12 +133,13 @@ class LiveModelTuner:
             return {}, self.model
             
         try:
-            # Create new model with same parameters
+            # Create new model with same parameters from inner Prophet model
+            prophet_model = self.model.model
             new_model = Prophet(
-                changepoint_prior_scale=self.model.changepoint_prior_scale,
-                seasonality_prior_scale=self.model.seasonality_prior_scale,
-                holidays_prior_scale=self.model.holidays_prior_scale,
-                seasonality_mode=self.model.seasonality_mode
+                changepoint_prior_scale=prophet_model.changepoint_prior_scale,
+                seasonality_prior_scale=prophet_model.seasonality_prior_scale,
+                holidays_prior_scale=prophet_model.holidays_prior_scale,
+                seasonality_mode=prophet_model.seasonality_mode
             )
             
             # Add any custom seasonalities from original model

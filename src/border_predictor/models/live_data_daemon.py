@@ -51,7 +51,6 @@ class LiveDataDaemon:
     def run(self) -> None:
         """Run the daemon process."""
         self.running = True
-        last_collection = datetime.now()
         collection_count = 0
         
         logger.info("Starting live data collection daemon...")
@@ -59,20 +58,43 @@ class LiveDataDaemon:
         logger.info(f"Live data path: {self.tuner.live_data_path}")
         logger.info(f"Retraining threshold: {self.tuner.retraining_threshold} data points")
         
+        # Initial collection
+        logger.info("Starting initial data collection...")
+        try:
+            wait_time, info = self.tuner.collect_live_data()
+            logger.info(f"Initial collection successful: {wait_time} minutes")
+            last_collection = datetime.now()
+        except Exception as e:
+            logger.error(f"Initial collection failed: {e}")
+            last_collection = datetime.now() - timedelta(seconds=self.collection_interval)  # Force immediate retry
+        
         while self.running:
             try:
-                collection_start = datetime.now()
-                collection_count += 1
+                current_time = datetime.now()
+                time_since_last = (current_time - last_collection).total_seconds()
                 
-                # Log collection attempt
+                if time_since_last < self.collection_interval:
+                    sleep_time = max(1, self.collection_interval - time_since_last)
+                    logger.debug(f"Waiting {sleep_time:.1f} seconds until next collection")
+                    time.sleep(sleep_time)
+                    continue
+                
+                collection_start = current_time
+                collection_count += 1
+                last_collection = current_time  # Update last collection time
+                
+                collection_count += 1
                 logger.info("-" * 60)
-                logger.info(f"Data collection cycle #{collection_count} started at {collection_start.strftime('%Y-%m-%d %H:%M:%S')}")
+                logger.info(f"Data collection cycle #{collection_count} at {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
                 
                 # Collect live data
                 wait_time, info = self.tuner.collect_live_data()
+                last_collection = current_time  # Update last collection time
+                
                 logger.info(f"Collected wait time: {wait_time} minutes")
                 logger.info(f"Border crossing status: {info.get('port_status', 'unknown')}")
                 logger.info(f"Last border update time: {info.get('update_time', 'unknown')}")
+                logger.info(f"Next collection scheduled for: {(current_time + timedelta(seconds=self.collection_interval)).strftime('%Y-%m-%d %H:%M:%S')}")
                 
                 # Check if we should retrain
                 should_retrain = self.tuner.should_retrain()
@@ -92,17 +114,16 @@ class LiveDataDaemon:
                     else:
                         logger.warning("Fine-tuning did not produce valid metrics - keeping existing model")
                 
-                # Calculate time until next collection
+                # Log completion
                 collection_duration = (datetime.now() - collection_start).total_seconds()
-                sleep_time = max(1, self.collection_interval - collection_duration)
-                next_collection = datetime.now() + timedelta(seconds=sleep_time)
+                next_collection = last_collection + timedelta(seconds=self.collection_interval)
                 
                 logger.info(f"Collection cycle completed in {collection_duration:.2f} seconds")
                 logger.info(f"Next collection scheduled at {next_collection.strftime('%Y-%m-%d %H:%M:%S')}")
                 logger.info("-" * 60)
                 
                 # Sleep until next collection
-                time.sleep(sleep_time)
+                time.sleep(self.collection_interval)
                 
             except Exception as e:
                 logger.error(f"Error in daemon process: {e}")
@@ -117,8 +138,9 @@ class LiveDataDaemon:
 def main():
     """Main entry point for the daemon process."""
     try:
-        # Load the latest model
-        model = BorderProphetModel.load_latest()
+        # Create and load the latest model
+        model = BorderProphetModel()
+        model.load_model()  # Uses default path from config
         
         # Create and run the daemon
         daemon = LiveDataDaemon(model)
