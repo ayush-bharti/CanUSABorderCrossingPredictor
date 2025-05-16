@@ -324,13 +324,24 @@ def save_live_data(df: pd.DataFrame, file_path: Optional[Path] = None) -> None:
         df: DataFrame with live data.
         file_path: Path to save the data. If None, uses the default path.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     if file_path is None:
         file_path = DATA_CONFIG["data_dir"] / "live_wait_times.csv"
+    
+    # Log the data being saved
+    for _, row in df.iterrows():
+        logger.info(f"Saving data point: timestamp={row['ds']} wait_time={row['y']} hour={row['hour']} "
+                   f"day_of_week={row['day_of_week']} month={row['month']} day={row['day']} "
+                   f"year={row['year']} is_weekend={row['is_weekend']}")
     
     # Check if file exists and append if it does
     if file_path.exists():
         existing_df = pd.read_csv(file_path)
         combined_df = pd.concat([existing_df, df])
         combined_df.to_csv(file_path, index=False)
+        logger.info(f"Appended {len(df)} new data points to existing file {file_path} (total: {len(combined_df)} records)")
     else:
         df.to_csv(file_path, index=False)
+        logger.info(f"Created new file {file_path} with {len(df)} data points")

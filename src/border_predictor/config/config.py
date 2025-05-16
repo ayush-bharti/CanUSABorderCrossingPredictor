@@ -19,6 +19,7 @@ DATA_CONFIG = {
     "current_data_path": DATA_DIR / "current_wait_times.csv",
     "processed_data_path": DATA_DIR / "processed_data.csv",
     "monthly_data_path": DATA_DIR / "monthly_converted_data.csv",
+    "live_data_path": DATA_DIR / "live_wait_times.csv",
 }
 
 LIVE_DATA_CONFIG = {

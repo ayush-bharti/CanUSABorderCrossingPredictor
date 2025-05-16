@@ -62,18 +62,41 @@ class LiveModelTuner:
             - Dictionary with additional crossing information
         """
         try:
+            # Get current time for logging
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            logger.info(f"Starting data collection at {current_time}")
+            
+            # Get wait time from API
             wait_time, info = get_current_wait_time()
+            logger.info(f"API response: wait_time={wait_time}, crossing_info={info}")
+            
+            # Prepare data for model
             new_data = prepare_live_data_for_model(wait_time)
+            logger.info(
+                f"Prepared data point: timestamp={new_data['ds'].iloc[0]} "
+                f"wait_time={new_data['y'].iloc[0]} "
+                f"hour={new_data['hour'].iloc[0]} "
+                f"day={new_data['day'].iloc[0]} "
+                f"month={new_data['month'].iloc[0]} "
+                f"year={new_data['year'].iloc[0]}"
+            )
             
             # Append new data
+            prev_len = len(self.live_data)
             self.live_data = pd.concat([self.live_data, new_data], ignore_index=True)
-            save_live_data(self.live_data, self.live_data_path)
+            logger.info(f"Added to live data collection (total: {len(self.live_data)} records)")
             
+            # Save to file
+            save_live_data(new_data, self.live_data_path)
+            
+            # Summary log
             logger.info(f"Collected new wait time: {wait_time} minutes")
             return wait_time, info
             
         except Exception as e:
             logger.error(f"Error collecting live data: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             raise
     
     def should_retrain(self) -> bool:
