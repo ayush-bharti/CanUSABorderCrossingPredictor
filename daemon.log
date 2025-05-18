@@ -1,0 +1,43 @@
+INFO:__main__:Successfully loaded pre-trained model
+INFO:__main__:Starting live data collection daemon...
+INFO:__main__:Collection interval: 15 minutes
+INFO:__main__:Live data path: /Users/ayushbharti/Code/Personal/CanUSABorderCrossingPredictor/data/live_wait_times.csv
+INFO:__main__:Retraining threshold: 96 data points
+INFO:__main__:Starting initial data collection...
+INFO:border_predictor.models.live_model_tuner:Starting data collection at 2025-05-17 14:38:22
+INFO:border_predictor.models.live_model_tuner:API response: wait_time=80, crossing_info={'port_name': 'Blaine', 'crossing_name': 'Peace Arch', 'port_status': 'Open', 'update_time': 'At 2:00 pm PDT', 'lane_type': 'standard'}
+INFO:border_predictor.models.live_model_tuner:Prepared data point: timestamp=2025-05-17 14:38:22.488614 wait_time=80 hour=14 day=17 month=5 year=2025
+INFO:border_predictor.models.live_model_tuner:Added to live data collection (total: 861 records)
+INFO:border_predictor.data.live_data_loader:Saving data point: timestamp=2025-05-17 14:38:22.488614 wait_time=80 hour=14 day_of_week=5 month=5 day=17 year=2025 is_weekend=1
+INFO:border_predictor.data.live_data_loader:Appended 1 new data points to existing file /Users/ayushbharti/Code/Personal/CanUSABorderCrossingPredictor/data/live_wait_times.csv (total: 861 records)
+INFO:border_predictor.models.live_model_tuner:Collected new wait time: 80 minutes
+INFO:__main__:Initial collection successful: 80 minutes
+INFO:__main__:------------------------------------------------------------
+INFO:__main__:Data collection cycle #2 at 2025-05-17 15:09:47
+INFO:border_predictor.models.live_model_tuner:Starting data collection at 2025-05-17 15:09:47
+INFO:border_predictor.models.live_model_tuner:API response: wait_time=40, crossing_info={'port_name': 'Blaine', 'crossing_name': 'Peace Arch', 'port_status': 'Open', 'update_time': 'At 3:00 pm PDT', 'lane_type': 'standard'}
+INFO:border_predictor.models.live_model_tuner:Prepared data point: timestamp=2025-05-17 15:09:47.767807 wait_time=40 hour=15 day=17 month=5 year=2025
+INFO:border_predictor.models.live_model_tuner:Added to live data collection (total: 862 records)
+INFO:border_predictor.data.live_data_loader:Saving data point: timestamp=2025-05-17 15:09:47.767807 wait_time=40 hour=15 day_of_week=5 month=5 day=17 year=2025 is_weekend=1
+INFO:border_predictor.data.live_data_loader:Appended 1 new data points to existing file /Users/ayushbharti/Code/Personal/CanUSABorderCrossingPredictor/data/live_wait_times.csv (total: 862 records)
+INFO:border_predictor.models.live_model_tuner:Collected new wait time: 40 minutes
+INFO:__main__:Collected wait time: 40 minutes
+INFO:__main__:Border crossing status: Open
+INFO:__main__:Last border update time: At 3:00 pm PDT
+INFO:__main__:Next collection scheduled for: 2025-05-17 15:24:47
+INFO:__main__:Current data points: 862 / 96 required for retraining
+INFO:__main__:Retraining model with new data...
+ERROR:border_predictor.models.live_model_tuner:Error during model fine-tuning: 'BorderProphetModel' object has no attribute 'changepoint_prior_scale'
+ERROR:__main__:Error in daemon process: 'BorderProphetModel' object has no attribute 'changepoint_prior_scale'
+ERROR:__main__:Detailed traceback:
+ERROR:__main__:Traceback (most recent call last):
+  File "/Users/ayushbharti/Code/Personal/CanUSABorderCrossingPredictor/src/border_predictor/models/live_data_daemon.py", line 116, in run
+    metrics, new_model = self.tuner.fine_tune_model()
+  File "/Users/ayushbharti/Code/Personal/CanUSABorderCrossingPredictor/src/border_predictor/models/live_model_tuner.py", line 153, in fine_tune_model
+    changepoint_prior_scale=prophet_model.changepoint_prior_scale,
+AttributeError: 'BorderProphetModel' object has no attribute 'changepoint_prior_scale'
+
+INFO:__main__:Will retry in 60 seconds...
+INFO:__main__:Received signal 15. Shutting down...
+INFO:__main__:Daemon process stopped.
+Model loaded from /Users/ayushbharti/Code/Personal/CanUSABorderCrossingPredictor/models/prophet_model.pkl

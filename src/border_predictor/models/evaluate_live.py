@@ -13,6 +13,54 @@ from border_predictor.models.prophet_model import BorderProphetModel
 from border_predictor.data.live_data_loader import get_current_wait_time, prepare_live_data_for_model, save_live_data
 
 
+def adjust_prediction_with_recent_data(prediction: float, recent_data: pd.DataFrame, adjustment_weight: float = 0.7) -> float:
+    """
+    Adjust a prediction based on recent actual wait times.
+    
+    Args:
+        prediction: The model's raw prediction
+        recent_data: DataFrame with recent wait time data, must have 'ds' and 'y' columns
+        adjustment_weight: Weight to give to recent data (0-1), higher values favor recent data
+    
+    Returns:
+        Adjusted prediction
+    """
+    if recent_data is None or len(recent_data) == 0:
+        return prediction
+    
+    # Sort by timestamp and get the most recent values
+    recent_data = recent_data.sort_values('ds')
+    
+    # Get the most recent 5 measurements (or fewer if not available)
+    num_recent = min(5, len(recent_data))
+    most_recent = recent_data.tail(num_recent)
+    
+    # Calculate the average of recent wait times
+    recent_avg = most_recent['y'].mean()
+    
+    # Apply time-based weighting (more recent = higher weight)
+    weights = np.linspace(0.5, 1.0, num_recent)
+    weighted_avg = np.average(most_recent['y'].values, weights=weights)
+    
+    # Calculate time since last observation
+    last_time = pd.to_datetime(most_recent['ds'].max())
+    now = datetime.now()
+    minutes_since_last = (now - last_time).total_seconds() / 60
+    
+    # Adjust weight based on recency (reduce weight if data is old)
+    if minutes_since_last > 30:
+        # Reduce adjustment_weight if data is more than 30 minutes old
+        adjustment_weight = adjustment_weight * (1 - min(0.5, (minutes_since_last - 30) / 60))
+    
+    # Calculate adjusted prediction as weighted average of model prediction and recent data
+    adjusted_prediction = (1 - adjustment_weight) * prediction + adjustment_weight * weighted_avg
+    
+    # Ensure prediction is non-negative
+    adjusted_prediction = max(0, adjusted_prediction)
+    
+    return adjusted_prediction
+
+
 def load_model(model_path: Optional[Path] = None) -> BorderProphetModel:
     """
     Load a trained Prophet model.
@@ -118,11 +166,31 @@ def evaluate_with_live_data(
         # Ensure prediction is non-negative
         if current_prediction < 0:
             current_prediction = 0
+            
+        # Load recent live data for adjustment
+        live_data_path = DATA_CONFIG["live_data_path"]
+        recent_data = None
+        if os.path.exists(live_data_path):
+            try:
+                recent_data = pd.read_csv(live_data_path)
+                if len(recent_data) > 0:
+                    print(f"Loaded {len(recent_data)} recent data points for prediction adjustment")
+            except Exception as e:
+                print(f"Warning: Could not load recent data for adjustment: {e}")
+                
+        # Apply real-time adjustment
+        raw_prediction = current_prediction
+        adjusted_prediction = adjust_prediction_with_recent_data(raw_prediction, recent_data)
         
         # Evaluate the current prediction
         actual = current_wait_time
-        predicted = current_prediction
+        predicted = adjusted_prediction
         error = abs(actual - predicted)
+        
+        # Log adjustment effect
+        adjustment_effect = adjusted_prediction - raw_prediction
+        print(f"Raw model prediction: {raw_prediction:.2f} minutes")
+        print(f"Adjustment applied: {adjustment_effect:.2f} minutes")
         
         print(f"Actual wait time: {actual} minutes")
         print(f"Predicted wait time for current hour: {predicted:.2f} minutes")

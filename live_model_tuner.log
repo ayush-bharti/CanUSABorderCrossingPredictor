@@ -1,0 +1,114 @@
+
+2025-05-17 16:31:57,215 - __main__ - INFO - Starting Live Model Tuner
+2025-05-17 16:31:57,216 - __main__ - INFO - Initializing Prophet model...
+2025-05-17 16:31:57,240 - __main__ - INFO - Initializing BorderProphetModel...
+2025-05-17 16:31:57,240 - __main__ - INFO - Prophet model initialized: True
+2025-05-17 16:31:57,240 - __main__ - INFO - Creating LiveModelTuner...
+2025-05-17 16:31:57,240 - __main__ - INFO - Initialized with model type: BorderProphetModel
+2025-05-17 16:31:57,240 - __main__ - INFO - Inner model exists: True
+2025-05-17 16:31:57,240 - __main__ - INFO - Inner model type: Prophet
+2025-05-17 16:31:57,241 - __main__ - INFO - Attempting to load live data from /Users/ayushbharti/Code/Personal/CanUSABorderCrossingPredictor/data/live_wait_times.csv
+2025-05-17 16:31:57,244 - __main__ - INFO - Successfully loaded 870 data points
+2025-05-17 16:31:57,245 - __main__ - INFO - Date range: 2025-05-13 11:50:42.750543 to 2025-05-17 16:26:01.010954
+2025-05-17 16:31:57,245 - __main__ - INFO - Wait time stats - Min: 0.0, Max: 90.0, Mean: 7.5 minutes
+2025-05-17 16:31:57,245 - __main__ - INFO - Running fine-tuning cycle...
+2025-05-17 16:31:57,245 - __main__ - INFO - Retraining conditions met: 870 data points (≥96)
+2025-05-17 16:31:57,245 - __main__ - INFO - Starting model fine-tuning...
+2025-05-17 16:31:57,245 - __main__ - INFO - Fine-tuning with 870 data points
+2025-05-17 16:31:57,246 - __main__ - INFO - Training on 870 data points
+2025-05-17 16:31:57,246 - __main__ - INFO - Creating new Prophet model with extracted parameters
+2025-05-17 16:31:57,246 - __main__ - INFO - Fitting Prophet model on 870 data points with cap=180
+2025-05-17 16:31:57,250 - prophet - INFO - Disabling yearly seasonality. Run prophet with yearly_seasonality=True to override this.
+2025-05-17 16:31:57,250 - prophet - INFO - Disabling weekly seasonality. Run prophet with weekly_seasonality=True to override this.
+2025-05-17 16:31:57,258 - cmdstanpy - DEBUG - input tempfile: /var/folders/k2/28hg914s67b80jp64sk__d1m0000gn/T/tmp1mh_tfin/q8mbs3cz.json
+2025-05-17 16:31:57,273 - cmdstanpy - DEBUG - input tempfile: /var/folders/k2/28hg914s67b80jp64sk__d1m0000gn/T/tmp1mh_tfin/o_yz2w91.json
+2025-05-17 16:31:57,274 - cmdstanpy - DEBUG - idx 0
+2025-05-17 16:31:57,274 - cmdstanpy - DEBUG - running CmdStan, num_threads: None
+2025-05-17 16:31:57,274 - cmdstanpy - DEBUG - CmdStan args: ['/Users/ayushbharti/Code/Personal/CanUSABorderCrossingPredictor/venv/lib/python3.10/site-packages/prophet/stan_model/prophet_model.bin', 'random', 'seed=57594', 'data', 'file=/var/folders/k2/28hg914s67b80jp64sk__d1m0000gn/T/tmp1mh_tfin/q8mbs3cz.json', 'init=/var/folders/k2/28hg914s67b80jp64sk__d1m0000gn/T/tmp1mh_tfin/o_yz2w91.json', 'output', 'file=/var/folders/k2/28hg914s67b80jp64sk__d1m0000gn/T/tmp1mh_tfin/prophet_model83l56vcm/prophet_model-20250517163157.csv', 'method=optimize', 'algorithm=lbfgs', 'iter=10000']
+2025-05-17 16:31:57,274 - cmdstanpy - INFO - Chain [1] start processing
+2025-05-17 16:31:57,335 - cmdstanpy - INFO - Chain [1] done processing
+2025-05-17 16:31:57,338 - __main__ - INFO - Model fitting completed in 0.09 seconds
+2025-05-17 16:31:57,475 - __main__ - INFO - Model performance metrics:
+2025-05-17 16:31:57,475 - __main__ - INFO -   MAE: 1.32
+2025-05-17 16:31:57,476 - __main__ - INFO -   RMSE: 2.54
+2025-05-17 16:31:57,476 - __main__ - INFO -   MAPE: 17.79
+2025-05-17 16:31:57,476 - __main__ - WARNING - MAPE (17.79) exceeds threshold (0.25)
+2025-05-17 16:31:57,476 - __main__ - INFO - Model fine-tuning completed in 0.23 seconds
+2025-05-17 16:31:57,476 - __main__ - INFO - Successfully created new BorderProphetModel with fine-tuned Prophet model
+2025-05-17 16:31:57,476 - __main__ - WARNING - Performance validation failed for mape: 17.79 > 0.25
+2025-05-17 16:31:57,476 - __main__ - WARNING - Fine-tuned model did not meet performance thresholds
+2025-05-17 16:31:57,476 - __main__ - WARNING - Fine-tuning did not complete successfully. Metrics: {'mae': 1.3196847155635194, 'rmse': 2.5382030474877455, 'mape': 17.793462664422503}
+2025-05-17 16:35:12,297 - __main__ - INFO - Starting Live Model Tuner
+2025-05-17 16:35:12,298 - __main__ - INFO - Initializing Prophet model...
+2025-05-17 16:35:12,328 - __main__ - INFO - Initializing BorderProphetModel...
+2025-05-17 16:35:12,328 - __main__ - INFO - Prophet model initialized: True
+2025-05-17 16:35:12,328 - __main__ - INFO - Creating LiveModelTuner...
+2025-05-17 16:35:12,328 - __main__ - INFO - Initialized with model type: BorderProphetModel
+2025-05-17 16:35:12,328 - __main__ - INFO - Inner model exists: True
+2025-05-17 16:35:12,328 - __main__ - INFO - Inner model type: Prophet
+2025-05-17 16:35:12,328 - __main__ - INFO - Attempting to load live data from /Users/ayushbharti/Code/Personal/CanUSABorderCrossingPredictor/data/live_wait_times.csv
+2025-05-17 16:35:12,332 - __main__ - INFO - Successfully loaded 870 data points
+2025-05-17 16:35:12,333 - __main__ - INFO - Date range: 2025-05-13 11:50:42.750543 to 2025-05-17 16:26:01.010954
+2025-05-17 16:35:12,333 - __main__ - INFO - Wait time stats - Min: 0.0, Max: 90.0, Mean: 7.5 minutes
+2025-05-17 16:35:12,333 - __main__ - INFO - Running fine-tuning cycle...
+2025-05-17 16:35:12,333 - __main__ - INFO - Retraining conditions met: 870 data points (≥96)
+2025-05-17 16:35:12,333 - __main__ - INFO - Starting model fine-tuning...
+2025-05-17 16:35:12,333 - __main__ - INFO - Fine-tuning with 870 data points
+2025-05-17 16:35:12,334 - __main__ - INFO - Training on 870 data points
+2025-05-17 16:35:12,334 - __main__ - INFO - Creating new Prophet model with extracted parameters
+2025-05-17 16:35:12,335 - __main__ - INFO - Fitting Prophet model on 870 data points with cap=180
+2025-05-17 16:35:12,338 - prophet - INFO - Disabling yearly seasonality. Run prophet with yearly_seasonality=True to override this.
+2025-05-17 16:35:12,338 - prophet - INFO - Disabling weekly seasonality. Run prophet with weekly_seasonality=True to override this.
+2025-05-17 16:35:12,346 - cmdstanpy - DEBUG - input tempfile: /var/folders/k2/28hg914s67b80jp64sk__d1m0000gn/T/tmp3swbzw0a/8ap1fs1g.json
+2025-05-17 16:35:12,362 - cmdstanpy - DEBUG - input tempfile: /var/folders/k2/28hg914s67b80jp64sk__d1m0000gn/T/tmp3swbzw0a/_3_qc0zi.json
+2025-05-17 16:35:12,363 - cmdstanpy - DEBUG - idx 0
+2025-05-17 16:35:12,363 - cmdstanpy - DEBUG - running CmdStan, num_threads: None
+2025-05-17 16:35:12,363 - cmdstanpy - DEBUG - CmdStan args: ['/Users/ayushbharti/Code/Personal/CanUSABorderCrossingPredictor/venv/lib/python3.10/site-packages/prophet/stan_model/prophet_model.bin', 'random', 'seed=31224', 'data', 'file=/var/folders/k2/28hg914s67b80jp64sk__d1m0000gn/T/tmp3swbzw0a/8ap1fs1g.json', 'init=/var/folders/k2/28hg914s67b80jp64sk__d1m0000gn/T/tmp3swbzw0a/_3_qc0zi.json', 'output', 'file=/var/folders/k2/28hg914s67b80jp64sk__d1m0000gn/T/tmp3swbzw0a/prophet_modelui7r8cgn/prophet_model-20250517163512.csv', 'method=optimize', 'algorithm=lbfgs', 'iter=10000']
+2025-05-17 16:35:12,363 - cmdstanpy - INFO - Chain [1] start processing
+2025-05-17 16:35:12,429 - cmdstanpy - INFO - Chain [1] done processing
+2025-05-17 16:35:12,432 - __main__ - INFO - Model fitting completed in 0.10 seconds
+2025-05-17 16:35:12,599 - __main__ - INFO - Model performance metrics:
+2025-05-17 16:35:12,599 - __main__ - INFO -   MAE: 1.32
+2025-05-17 16:35:12,599 - __main__ - INFO -   RMSE: 2.54
+2025-05-17 16:35:12,599 - __main__ - INFO -   MAPE: 17.79
+2025-05-17 16:35:12,599 - __main__ - INFO - Model fine-tuning completed in 0.27 seconds
+2025-05-17 16:35:12,599 - __main__ - INFO - Successfully created new BorderProphetModel with fine-tuned Prophet model
+2025-05-17 16:35:12,600 - __main__ - INFO - Model successfully updated with fine-tuned version
+2025-05-17 16:35:12,600 - __main__ - INFO - Fine-tuning completed successfully. Metrics: {'mae': 1.3196847155635194, 'rmse': 2.5382030474877455, 'mape': 17.793462664422503}
+2025-05-17 16:40:50,208 - __main__ - INFO - Starting Live Model Tuner
+2025-05-17 16:40:50,208 - __main__ - INFO - Initializing Prophet model with enhanced responsiveness to recent patterns...
+2025-05-17 16:40:50,235 - __main__ - INFO - Initializing BorderProphetModel...
+2025-05-17 16:40:50,235 - __main__ - INFO - Prophet model initialized: True
+2025-05-17 16:40:50,235 - __main__ - INFO - Creating LiveModelTuner...
+2025-05-17 16:40:50,235 - __main__ - INFO - Initialized with model type: BorderProphetModel
+2025-05-17 16:40:50,235 - __main__ - INFO - Inner model exists: True
+2025-05-17 16:40:50,235 - __main__ - INFO - Inner model type: Prophet
+2025-05-17 16:40:50,235 - __main__ - INFO - Attempting to load live data from /Users/ayushbharti/Code/Personal/CanUSABorderCrossingPredictor/data/live_wait_times.csv
+2025-05-17 16:40:50,247 - __main__ - INFO - Successfully loaded 871 data points
+2025-05-17 16:40:50,250 - __main__ - INFO - Date range: 2025-05-13 11:50:42.750543 to 2025-05-17 16:36:09.449326
+2025-05-17 16:40:50,250 - __main__ - INFO - Wait time stats - Min: 0.0, Max: 90.0, Mean: 7.5 minutes
+2025-05-17 16:40:50,251 - __main__ - INFO - Running fine-tuning cycle...
+2025-05-17 16:40:50,251 - __main__ - INFO - Retraining conditions met: 871 data points (≥96)
+2025-05-17 16:40:50,251 - __main__ - INFO - Starting model fine-tuning...
+2025-05-17 16:40:50,251 - __main__ - INFO - Fine-tuning with 871 data points
+2025-05-17 16:40:50,252 - __main__ - INFO - Training on 871 data points
+2025-05-17 16:40:50,252 - __main__ - INFO - Creating new Prophet model with extracted parameters
+2025-05-17 16:40:50,253 - __main__ - INFO - Fitting Prophet model on 871 data points with cap=180
+2025-05-17 16:40:50,260 - prophet - INFO - Disabling yearly seasonality. Run prophet with yearly_seasonality=True to override this.
+2025-05-17 16:40:50,260 - prophet - INFO - Disabling weekly seasonality. Run prophet with weekly_seasonality=True to override this.
+2025-05-17 16:40:50,272 - cmdstanpy - DEBUG - input tempfile: /var/folders/k2/28hg914s67b80jp64sk__d1m0000gn/T/tmpjt1wkz9x/3hikk1fo.json
+2025-05-17 16:40:50,288 - cmdstanpy - DEBUG - input tempfile: /var/folders/k2/28hg914s67b80jp64sk__d1m0000gn/T/tmpjt1wkz9x/d7n4jybp.json
+2025-05-17 16:40:50,289 - cmdstanpy - DEBUG - idx 0
+2025-05-17 16:40:50,289 - cmdstanpy - DEBUG - running CmdStan, num_threads: None
+2025-05-17 16:40:50,289 - cmdstanpy - DEBUG - CmdStan args: ['/Users/ayushbharti/Code/Personal/CanUSABorderCrossingPredictor/venv/lib/python3.10/site-packages/prophet/stan_model/prophet_model.bin', 'random', 'seed=70700', 'data', 'file=/var/folders/k2/28hg914s67b80jp64sk__d1m0000gn/T/tmpjt1wkz9x/3hikk1fo.json', 'init=/var/folders/k2/28hg914s67b80jp64sk__d1m0000gn/T/tmpjt1wkz9x/d7n4jybp.json', 'output', 'file=/var/folders/k2/28hg914s67b80jp64sk__d1m0000gn/T/tmpjt1wkz9x/prophet_modelvfd3ubws/prophet_model-20250517164050.csv', 'method=optimize', 'algorithm=lbfgs', 'iter=10000']
+2025-05-17 16:40:50,289 - cmdstanpy - INFO - Chain [1] start processing
+2025-05-17 16:40:50,403 - cmdstanpy - INFO - Chain [1] done processing
+2025-05-17 16:40:50,406 - __main__ - INFO - Model fitting completed in 0.15 seconds
+2025-05-17 16:40:50,567 - __main__ - INFO - Model performance metrics:
+2025-05-17 16:40:50,567 - __main__ - INFO -   MAE: 1.23
+2025-05-17 16:40:50,567 - __main__ - INFO -   RMSE: 2.45
+2025-05-17 16:40:50,567 - __main__ - INFO -   MAPE: 15.75
+2025-05-17 16:40:50,567 - __main__ - INFO - Model fine-tuning completed in 0.32 seconds
+2025-05-17 16:40:50,567 - __main__ - INFO - Successfully created new BorderProphetModel with fine-tuned Prophet model
+2025-05-17 16:40:50,567 - __main__ - INFO - Model successfully updated with fine-tuned version
+2025-05-17 16:40:50,567 - __main__ - INFO - Fine-tuning completed successfully. Metrics: {'mae': 1.2327843163922148, 'rmse': 2.450186220087629, 'mape': 15.754159568021613}

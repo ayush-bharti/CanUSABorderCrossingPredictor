@@ -27,6 +27,51 @@ class BorderProphetModel:
         self.model = None
         self.last_forecast = None
         self.metrics = None
+        
+    def save_model(self, path: Optional[Path] = None) -> None:
+        """
+        Save the trained Prophet model to disk.
+        
+        Args:
+            path: Optional path to save the model. If None, uses default from MODEL_CONFIG.
+        """
+        if self.model is None:
+            raise ValueError("No model to save. Please train the model first.")
+            
+        save_path = path or Path(MODEL_CONFIG["model_path"])
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(save_path, 'wb') as f:
+            pickle.dump({
+                'model': self.model,
+                'config': self.config,
+                'metrics': self.metrics,
+                'last_forecast': self.last_forecast
+            }, f)
+            
+        logger.info(f"Model saved to {save_path}")
+        
+    def load_model(self, path: Optional[Path] = None) -> None:
+        """
+        Load a trained Prophet model from disk.
+        
+        Args:
+            path: Optional path to load the model from. If None, uses default from MODEL_CONFIG.
+        """
+        load_path = path or Path(MODEL_CONFIG["model_path"])
+        
+        if not load_path.exists():
+            raise FileNotFoundError(f"No saved model found at {load_path}")
+            
+        with open(load_path, 'rb') as f:
+            saved_data = pickle.load(f)
+            
+        self.model = saved_data['model']
+        self.config = saved_data['config']
+        self.metrics = saved_data.get('metrics')  # Backwards compatibility
+        self.last_forecast = saved_data.get('last_forecast')  # Backwards compatibility
+        
+        logger.info(f"Model loaded from {load_path}")
     
     def build_model(self) -> Prophet:
         """

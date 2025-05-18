@@ -45,8 +45,32 @@ class LiveDataDaemon:
     
     def handle_signal(self, signum: int, frame) -> None:
         """Handle termination signals gracefully."""
-        logger.info(f"Received signal {signum}. Shutting down...")
+        if not self.running:
+            # If we're already shutting down, just log and return
+            logger.info(f"Received signal {signum} during shutdown. Already stopping...")
+            return
+            
+        logger.info(f"Received signal {signum}. Initiating shutdown...")
         self.running = False
+        
+        # Set a flag to indicate we're in shutdown mode
+        if not hasattr(self, '_shutdown_started'):
+            self._shutdown_started = True
+            self._shutdown_start_time = time.time()
+            logger.info("Shutdown initiated at " + datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+            
+            # Try to clean up resources
+            try:
+                if hasattr(self, 'tuner') and self.tuner:
+                    logger.info("Cleaning up tuner resources...")
+                    # Save any pending data
+                    if hasattr(self.tuner, 'live_data') and not self.tuner.live_data.empty:
+                        logger.info(f"Saving {len(self.tuner.live_data)} pending data points...")
+                        self.tuner._save_live_data()
+            except Exception as e:
+                logger.error(f"Error during shutdown cleanup: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
     
     def run(self) -> None:
         """Run the daemon process with signal-safe sleep intervals."""
@@ -54,102 +78,105 @@ class LiveDataDaemon:
         collection_count = 0
         SLEEP_INTERVAL = 15  # 15-second intervals for better signal handling
         
-        logger.info("Starting live data collection daemon...")
-        logger.info(f"Collection interval: {self.collection_interval//60} minutes")
-        logger.info(f"Live data path: {self.tuner.live_data_path}")
-        logger.info(f"Retraining threshold: {self.tuner.retraining_threshold} data points")
-        
-        # Initial collection
-        logger.info("Starting initial data collection...")
         try:
-            wait_time, info = self.tuner.collect_live_data()
-            logger.info(f"Initial collection successful: {wait_time} minutes")
-            last_collection = datetime.now()
-        except Exception as e:
-            logger.error(f"Initial collection failed: {e}")
-            last_collection = datetime.now() - timedelta(seconds=self.collection_interval)  # Force immediate retry
-        
-        while self.running:
+            logger.info("Starting live data collection daemon...")
+            logger.info(f"Collection interval: {self.collection_interval//60} minutes")
+            logger.info(f"Live data path: {self.tuner.live_data_path}")
+            logger.info(f"Retraining threshold: {self.tuner.retraining_threshold} data points")
+            
+            # Initial collection
+            logger.info("Starting initial data collection...")
             try:
-                current_time = datetime.now()
-                time_since_last = (current_time - last_collection).total_seconds()
-                
-                if time_since_last < self.collection_interval:
-                    # Break down sleep into smaller intervals for better signal handling
-                    sleep_remaining = max(1, self.collection_interval - time_since_last)
-                    logger.debug(f"Waiting {sleep_remaining:.1f} seconds until next collection")
-                    
-                    while sleep_remaining > 0 and self.running:
-                        sleep_chunk = min(SLEEP_INTERVAL, sleep_remaining)
-                        time.sleep(sleep_chunk)
-                        sleep_remaining -= sleep_chunk
-                        
-                    if not self.running:
-                        break
-                    continue
-                
-                collection_start = current_time
-                collection_count += 1
-                last_collection = current_time  # Update last collection time
-                
-                collection_count += 1
-                logger.info("-" * 60)
-                logger.info(f"Data collection cycle #{collection_count} at {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
-                
-                # Collect live data
                 wait_time, info = self.tuner.collect_live_data()
-                last_collection = current_time  # Update last collection time
-                
-                logger.info(f"Collected wait time: {wait_time} minutes")
-                logger.info(f"Border crossing status: {info.get('port_status', 'unknown')}")
-                logger.info(f"Last border update time: {info.get('update_time', 'unknown')}")
-                logger.info(f"Next collection scheduled for: {(current_time + timedelta(seconds=self.collection_interval)).strftime('%Y-%m-%d %H:%M:%S')}")
-                
-                # Check if we should retrain
-                should_retrain = self.tuner.should_retrain()
-                current_data_points = len(self.tuner.live_data)
-                logger.info(f"Current data points: {current_data_points} / {self.tuner.retraining_threshold} required for retraining")
-                
-                if should_retrain:
-                    logger.info("Retraining model with new data...")
-                    retrain_start = datetime.now()
-                    metrics, new_model = self.tuner.fine_tune_model()
-                    
-                    if metrics:  # Only update if fine-tuning was successful
-                        self.model = new_model
-                        retrain_duration = (datetime.now() - retrain_start).total_seconds()
-                        logger.info(f"Model fine-tuned successfully in {retrain_duration:.2f} seconds")
-                        logger.info(f"New metrics: MAE={metrics.get('mae', 'N/A')}, RMSE={metrics.get('rmse', 'N/A')}, MAPE={metrics.get('mape', 'N/A')}")
-                    else:
-                        logger.warning("Fine-tuning did not produce valid metrics - keeping existing model")
-                
-                # Log completion
-                collection_duration = (datetime.now() - collection_start).total_seconds()
-                next_collection = last_collection + timedelta(seconds=self.collection_interval)
-                
-                logger.info(f"Collection cycle completed in {collection_duration:.2f} seconds")
-                logger.info(f"Next collection scheduled at {next_collection.strftime('%Y-%m-%d %H:%M:%S')}")
-                logger.info("-" * 60)
-                
-                # Sleep until next collection
-                time.sleep(self.collection_interval)
-                
+                logger.info(f"Initial collection successful: {wait_time} minutes")
+                last_collection = datetime.now()
             except Exception as e:
-                logger.error(f"Error in daemon process: {e}")
-                logger.error("Detailed traceback:")
-                import traceback
-                logger.error(traceback.format_exc())
-                logger.info("Will retry in 60 seconds...")
-                time.sleep(60)  # Wait a minute before retrying
-        
-        logger.info("Daemon process stopped.")
+                logger.error(f"Initial collection failed: {e}")
+                last_collection = datetime.now() - timedelta(seconds=self.collection_interval)  # Force immediate retry
+            
+            while self.running:
+                try:
+                    current_time = datetime.now()
+                    time_since_last = (current_time - last_collection).total_seconds()
+                    
+                    if time_since_last < self.collection_interval:
+                        # Break down sleep into smaller intervals for better signal handling
+                        sleep_remaining = max(1, self.collection_interval - time_since_last)
+                        logger.debug(f"Waiting {sleep_remaining:.1f} seconds until next collection")
+                        
+                        while sleep_remaining > 0 and self.running:
+                            sleep_chunk = min(SLEEP_INTERVAL, sleep_remaining)
+                            time.sleep(sleep_chunk)
+                            sleep_remaining -= sleep_chunk
+                            
+                        if not self.running:
+                            break
+                        continue
+                    
+                    collection_start = current_time
+                    collection_count += 1
+                    last_collection = current_time  # Update last collection time
+                    
+                    logger.info("-" * 60)
+                    logger.info(f"Data collection cycle #{collection_count} at {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                    
+                    # Collect live data
+                    wait_time, info = self.tuner.collect_live_data()
+                    last_collection = current_time  # Update last collection time
+
+                    logger.info(f"Collected wait time: {wait_time} minutes")
+                    logger.info(f"Border crossing status: {info.get('port_status', 'unknown')}")
+                    logger.info(f"Last border update time: {info.get('update_time', 'unknown')}")
+                    logger.info(f"Next collection scheduled for: {last_collection + timedelta(seconds=self.collection_interval)}")
+                    
+                    # Check if we have enough data for retraining
+                    if self.tuner.should_retrain():
+                        logger.info(f"Current data points: {len(self.tuner.live_data)} / {self.tuner.retraining_threshold} required for retraining")
+                        logger.info("Retraining model with new data...")
+                        try:
+                            metrics, new_model = self.tuner.fine_tune_model()
+                            if new_model:
+                                self.model = new_model
+                                logger.info("Model retrained successfully")
+                                logger.info(f"New metrics: {metrics}")
+                        except Exception as e:
+                            logger.error(f"Error in model fine-tuning: {e}")
+                            import traceback
+                            logger.error(traceback.format_exc())
+                            logger.info(f"Will retry in {self.collection_interval//60} minutes...")
+                    else:
+                        logger.info(f"Current data points: {len(self.tuner.live_data)} / {self.tuner.retraining_threshold} required for retraining")
+                        logger.info(f"Next collection scheduled for: {last_collection + timedelta(seconds=self.collection_interval)}")
+                except Exception as e:
+                    logger.error(f"Error in data collection cycle: {e}")
+                    import traceback
+                    logger.error(traceback.format_exc())
+                    logger.info(f"Will retry in {self.collection_interval//60} minutes...")
+                    time.sleep(self.collection_interval)  # Wait before retrying
+        except Exception as e:
+            logger.error(f"Fatal error in daemon: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+        finally:
+            # Final cleanup
+            if hasattr(self, '_shutdown_started'):
+                shutdown_duration = time.time() - self._shutdown_start_time
+                logger.info(f"Shutdown completed after {shutdown_duration:.1f} seconds")
+            logger.info("Daemon process terminated")
 
 def main():
     """Main entry point for the daemon process."""
     try:
-        # Create and load the latest model
+        # Create and load the pre-trained model
         model = BorderProphetModel()
-        model.load_model()  # Uses default path from config
+        
+        try:
+            # Try to load the existing model
+            model.load_model()
+            logger.info("Successfully loaded pre-trained model")
+        except FileNotFoundError:
+            logger.error("No pre-trained model found. Please train a model first using run_training.py")
+            sys.exit(1)
         
         # Create and run the daemon
         daemon = LiveDataDaemon(model)

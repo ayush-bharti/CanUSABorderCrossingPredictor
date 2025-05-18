@@ -51,17 +51,51 @@ pip install -r requirements.txt
 python -m border_predictor.models.train_model
 
 # Start live data collection and model fine-tuning
+python -m border_predictor.models.live_data_daemon
+
 python -m border_predictor.models.live_model_tuner
 
 # Evaluate model performance with live data
 python -m border_predictor.models.evaluate_live
 ```
 
-The model automatically:
-- Collects live wait times every 15 minutes
-- Fine-tunes itself when sufficient new data is available
-- Benchmarks predictions against actual wait times
-- Adjusts hyperparameters based on performance
+The live data daemon process:
+1. Collects live wait times every 15 minutes
+2. Fine-tunes the model when sufficient new data is available (default: 96 new data points)
+3. Benchmarks predictions against actual wait times
+4. Adjusts hyperparameters based on performance
+
+#### Running the Live Data Daemon
+
+To run the daemon in the foreground:
+```bash
+python -m border_predictor.models.live_data_daemon
+```
+
+To run in the background with logging:
+```bash
+nohup python -m border_predictor.models.live_data_daemon > daemon.log 2>&1 &
+```
+
+To check the daemon's status:
+```bash
+tail -f daemon.log  # View real-time logs
+ps aux | grep live_data_daemon  # Check if daemon is running
+```
+
+To stop the daemon:
+```bash
+pkill -f "python -m border_predictor.models.live_data_daemon"
+```
+
+#### Model Fine-tuning Parameters
+
+The fine-tuning process can be configured with these parameters:
+- `collection_interval`: Time between data collection (default: 15 minutes)
+- `retraining_threshold`: Number of new data points before retraining (default: 96)
+- `max_retrain_window`: Maximum historical data window for retraining (default: 336 hours)
+
+These parameters can be adjusted in the `config/model_config.yaml` file.
 
 ### Making Predictions
 
