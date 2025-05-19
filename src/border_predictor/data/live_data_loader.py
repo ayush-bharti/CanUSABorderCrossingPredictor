@@ -287,12 +287,13 @@ def get_current_wait_time(
     return delay_mins, crossing_info
 
 
-def prepare_live_data_for_model(wait_time: int) -> pd.DataFrame:
+def prepare_live_data_for_model(wait_time: int, crossing_info: Optional[Dict] = None) -> pd.DataFrame:
     """
     Prepare live data for the Prophet model.
     
     Args:
         wait_time: Current wait time in minutes.
+        crossing_info: Optional dictionary with additional crossing information.
         
     Returns:
         DataFrame with 'ds' and 'y' columns ready for Prophet.
@@ -339,9 +340,25 @@ def save_live_data(df: pd.DataFrame, file_path: Optional[Path] = None) -> None:
     # Check if file exists and append if it does
     if file_path.exists():
         existing_df = pd.read_csv(file_path)
+        # Parse dates to ensure proper comparison
+        if 'ds' in existing_df.columns:
+            existing_df['ds'] = pd.to_datetime(existing_df['ds'])
+            
+        # Convert datetimes in new df to ensure proper comparison
+        if 'ds' in df.columns:
+            df['ds'] = pd.to_datetime(df['ds'])
+            
+        # Combine and remove duplicates
         combined_df = pd.concat([existing_df, df])
+        # Drop duplicates based on timestamp and wait time
+        original_len = len(combined_df)
+        combined_df = combined_df.drop_duplicates(subset=['ds', 'y'], keep='last')
+        removed_duplicates = original_len - len(combined_df)
+        
+        # Save to CSV
         combined_df.to_csv(file_path, index=False)
-        logger.info(f"Appended {len(df)} new data points to existing file {file_path} (total: {len(combined_df)} records)")
+        new_points = len(df) - removed_duplicates if removed_duplicates <= len(df) else 0
+        logger.info(f"Appended {new_points} new data points to existing file {file_path} (removed {removed_duplicates} duplicates, total: {len(combined_df)} records)")
     else:
         df.to_csv(file_path, index=False)
         logger.info(f"Created new file {file_path} with {len(df)} data points")
