@@ -66,13 +66,27 @@ to GitHub. A laptop cron entry works as a fallback but leaves gaps whenever the 
 ### Baseline Predictions
 
 `border_predictor.baseline` predicts from the CBP historical averages for (month, weekday, hour),
-scaled up on US/WA and Canada/BC holidays and the days next to them. When a current reading is
-available, its gap from the historical average is carried forward and fades out over a few hours.
-Tunables live in `BASELINE_CONFIG` in `config/config.py`.
+optionally scaled on US/WA and Canada/BC holidays and the days next to them (multipliers are 1.0,
+i.e. off, until fitted from data). When a current reading is available, its gap from the historical
+average is carried forward and fades out over a few hours. Tunables live in `BASELINE_CONFIG` in
+`config/config.py`.
 
 ```bash
 python -m border_predictor.predict                       # next 12 hours from now, using the live reading
 python -m border_predictor.predict --at "2026-12-24 15:00" --hours 6 --no-live
+```
+
+### Cascade Gateway History
+
+`border_predictor.cascade` downloads 5-minute delay, volume and data-availability readings from the
+[Cascade Gateway Border Data API](https://www.cascadegatewaydata.com/Api) for Peace Arch and Pacific
+Highway, both directions, cars and NEXUS. It needs `CASCADE_API_KEY` in the environment or `.env`.
+Files land in `data/cascade/<lane_id>/YYYY-MM.csv`, which is gitignored; months already downloaded
+are skipped, so the command can be re-run to resume or to add new months.
+
+```bash
+python -m border_predictor.cascade                       # 2007-01 through last full month
+python -m border_predictor.cascade --start 2026-09 --end 2026-09
 ```
 
 ### Training and Fine-tuning the Model (Prophet, legacy)
