@@ -51,6 +51,27 @@ BORDER_CONFIG = {
     "lane_type": "standard",  # Default lane type for fetching live data
 }
 
+# Collector configuration: raw CBP readings, deduplicated by (port, lane, reported time)
+COLLECTOR_CONFIG = {
+    "api_url": "https://bwt.cbp.gov/api/waittimes",
+    "output_dir": DATA_DIR / "collected",
+    # Cascade Gateway ports: Peace Arch, Pacific Highway, Lynden, Sumas
+    "port_numbers": ["300402", "300401", "302301", "300901"],
+    "timeout_seconds": 20,
+}
+
+# Baseline predictor configuration
+BASELINE_CONFIG = {
+    "port_number": "300402",  # Peace Arch
+    "lane": "passenger_standard",
+    "timezone": "America/Vancouver",
+    # Multipliers applied to the historical profile. Untuned priors; fit them during evaluation.
+    "holiday_multiplier": 1.3,
+    "holiday_adjacent_multiplier": 1.15,
+    # How fast the gap between the latest reading and the profile fades (minutes)
+    "nowcast_decay_minutes": 180.0,
+}
+
 # Web application configuration
 WEB_CONFIG = {
     "host": "0.0.0.0",

@@ -44,7 +44,38 @@ pip install -r requirements.txt
 
 ## Usage
 
-### Training and Fine-tuning the Model
+### Collecting Wait Times
+
+`border_predictor.collector` fetches the CBP feed once and appends new readings for the
+Cascade Gateway ports (Peace Arch, Pacific Highway, Lynden, Sumas) to `data/collected/YYYY-MM.csv`.
+Rows are keyed on CBP's own update time, so running it more often than CBP updates (hourly)
+never creates duplicates.
+
+```bash
+python -m border_predictor.collector
+```
+
+It is meant to run on a schedule from an always-on machine. `.github/workflows/collect.yml`
+runs it twice an hour on GitHub Actions and commits new readings once the repo is pushed
+to GitHub. A laptop cron entry works as a fallback but leaves gaps whenever the machine sleeps:
+
+```
+*/15 * * * * cd /path/to/CanUSABorderCrossingPredictor && venv/bin/python -m border_predictor.collector >> collector.log 2>&1
+```
+
+### Baseline Predictions
+
+`border_predictor.baseline` predicts from the CBP historical averages for (month, weekday, hour),
+scaled up on US/WA and Canada/BC holidays and the days next to them. When a current reading is
+available, its gap from the historical average is carried forward and fades out over a few hours.
+Tunables live in `BASELINE_CONFIG` in `config/config.py`.
+
+```bash
+python -m border_predictor.predict                       # next 12 hours from now, using the live reading
+python -m border_predictor.predict --at "2026-12-24 15:00" --hours 6 --no-live
+```
+
+### Training and Fine-tuning the Model (Prophet, legacy)
 
 ```bash
 # Train the initial model using historical data
