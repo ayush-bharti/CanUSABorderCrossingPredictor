@@ -45,3 +45,6 @@ Thumbs.db
 
 #Output files
 output/
+
+# Cascade Gateway data: large, and redistribution terms unknown
+data/cascade/
