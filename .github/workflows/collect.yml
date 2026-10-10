@@ -2,9 +2,9 @@ name: Collect wait times
 
 on:
   schedule:
-    # CBP updates hourly; polling twice an hour catches each update despite scheduler delays
-    # and stays inside the 2,000 free Actions minutes a private repo gets per month
-    - cron: "7,37 * * * *"
+    # CBP posts one update per hour, stamped on the hour; run once an hour,
+    # 20 minutes past, to give that update time to appear in the feed
+    - cron: "20 * * * *"
   workflow_dispatch:
 
 permissions:

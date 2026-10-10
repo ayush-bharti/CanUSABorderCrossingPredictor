@@ -56,11 +56,11 @@ python -m border_predictor.collector
 ```
 
 It is meant to run on a schedule from an always-on machine. `.github/workflows/collect.yml`
-runs it twice an hour on GitHub Actions and commits new readings once the repo is pushed
+runs it once an hour (20 minutes past) on GitHub Actions and commits new readings once the repo is pushed
 to GitHub. A laptop cron entry works as a fallback but leaves gaps whenever the machine sleeps:
 
 ```
-*/15 * * * * cd /path/to/CanUSABorderCrossingPredictor && venv/bin/python -m border_predictor.collector >> collector.log 2>&1
+20 * * * * cd /path/to/CanUSABorderCrossingPredictor && venv/bin/python -m border_predictor.collector >> collector.log 2>&1
 ```
 
 ### Baseline Predictions
