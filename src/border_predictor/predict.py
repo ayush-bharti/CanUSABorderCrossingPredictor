@@ -1,51 +1,34 @@
-"""Print baseline wait time predictions, anchored on the current CBP reading."""
-from typing import Optional, Tuple
+"""Print baseline delay predictions for a Cascade lane, anchored on its current reading."""
 import argparse
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from border_predictor.baseline import BaselinePredictor
-from border_predictor.collector import extract_readings, fetch_ports
-from border_predictor.config.config import BASELINE_CONFIG, COLLECTOR_CONFIG
-
-
-def latest_reading(port_number: str, lane: str, tz: ZoneInfo) -> Optional[Tuple[datetime, float]]:
-    """
-    Fetch the current CBP reading for one lane.
-
-    Args:
-        port_number: CBP port number.
-        lane: Lane name as produced by the collector, e.g. "passenger_standard".
-        tz: Local timezone of the crossing.
-
-    Returns:
-        (naive local reported time, wait in minutes), or None if unavailable.
-    """
-    ports = fetch_ports(COLLECTOR_CONFIG["api_url"], COLLECTOR_CONFIG["timeout_seconds"])
-    readings = extract_readings(ports, [port_number], datetime.now(timezone.utc))
-    for row in readings:
-        if row["lane"] == lane and row["delay_minutes"] != "":
-            reported = datetime.fromisoformat(row["reported_at_utc"]).astimezone(tz)
-            return reported.replace(tzinfo=None), float(row["delay_minutes"])
-    return None
+from border_predictor.cascade import fetch_current_delay
+from border_predictor.config.config import BASELINE_CONFIG, CASCADE_CONFIG
+from border_predictor.train_baseline import model_path
 
 
 def main() -> None:
     """Command line entry point."""
+    lanes = ", ".join(f"{i}={n}" for i, n in CASCADE_CONFIG["lanes"].items())
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--lane", type=int, default=BASELINE_CONFIG["default_lane_id"], help=lanes)
     parser.add_argument("--at", help='Local target time, "YYYY-MM-DD HH:MM". Defaults to now.')
     parser.add_argument("--hours", type=int, default=12, help="Hours to show from the target time")
-    parser.add_argument("--no-live", action="store_true", help="Ignore the current CBP reading")
+    parser.add_argument("--no-live", action="store_true", help="Ignore the current reading")
     args = parser.parse_args()
 
-    tz = ZoneInfo(BASELINE_CONFIG["timezone"])
-    now = datetime.now(tz).replace(tzinfo=None)
+    path = model_path(args.lane)
+    if not path.exists():
+        raise SystemExit(f"No model at {path}; run python -m border_predictor.train_baseline --lanes {args.lane}")
+    predictor = BaselinePredictor.load(path)
+
+    now = datetime.now(ZoneInfo(BASELINE_CONFIG["timezone"])).replace(tzinfo=None)
     start = datetime.strptime(args.at, "%Y-%m-%d %H:%M") if args.at else now
 
-    predictor = BaselinePredictor()
-    reading = None if args.no_live else latest_reading(
-        BASELINE_CONFIG["port_number"], BASELINE_CONFIG["lane"], tz
-    )
+    reading = None if args.no_live else fetch_current_delay(args.lane)
+    print(CASCADE_CONFIG["lanes"][args.lane])
     if reading:
         print(f"Latest reading: {reading[1]:.0f} min at {reading[0]:%Y-%m-%d %H:%M}")
     elif not args.no_live:
