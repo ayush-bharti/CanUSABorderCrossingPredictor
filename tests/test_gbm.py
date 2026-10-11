@@ -21,6 +21,31 @@ def test_holiday_distances_signed_and_capped():
     assert dist.loc[date(2026, 3, 10), "days_from_holiday_us"] == 7    # nothing within a week
 
 
+def test_holiday_names_are_stable_codes():
+    dist = holiday_distances([date(2026, 6, 29), date(2026, 11, 27), date(2026, 3, 10), date(2027, 7, 5)])
+    ca_names, us_names = gbm.holiday_calendars()["ca"][1], gbm.holiday_calendars()["us"][1]
+    assert ca_names[int(dist.loc[date(2026, 6, 29), "holiday_ca"])] == "Canada Day"
+    assert us_names[int(dist.loc[date(2026, 11, 27), "holiday_us"])] == "Thanksgiving"   # Black Friday
+    assert np.isnan(dist.loc[date(2026, 3, 10), "holiday_us"])
+    # Observed holidays map to the same code as the holiday itself
+    assert us_names[int(dist.loc[date(2027, 7, 5), "holiday_us"])] == "Independence Day"
+
+
+def test_history_rows_are_flagged_and_weighted(synthetic_lane):
+    hourly = synthetic_lane["delay"].resample("H").mean()
+    model = BaselinePredictor.fit(hourly["2025-01"], decay_minutes=60.0)
+    f = build_features(synthetic_lane, hourly, live_readings(synthetic_lane), model,
+                       hourly["2025-02-01":"2025-02-03"].index, [0])
+    assert (f.pre_covid == 0).all()
+    history = f.head(5).assign(pre_covid=1)
+    combined = gbm.with_history(f, history, 0.25)
+    assert len(combined) == len(f) + 5
+    assert (combined.weight[:len(f)] == 1.0).all() and (combined.weight[len(f):] == 0.25).all()
+    assert gbm.with_history(f, history, 0.0) is f
+    # Weighted rows train without error
+    fit_gbm(combined, "median", 5)
+
+
 @pytest.fixture
 def synthetic_lane():
     """Two months of 5-minute readings where delay equals the hour of day."""
