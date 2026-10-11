@@ -1,37 +1,40 @@
 # US-Canada Border Crossing Predictor
 
-A machine learning model to predict wait times at the Blaine Peace Arch border crossing between Vancouver and Seattle.
+Predicts the delay at the Peace Arch and Pacific Highway crossings between Vancouver and Seattle, in both
+directions, for cars and NEXUS, from now up to a week ahead.
 
 ## Project Overview
 
-This project uses Facebook's Prophet library to predict border crossing wait times based on:
-- Historical average wait times by month, day, and time
-- Live border wait times (collected every 15 minutes)
-- Continuous model fine-tuning with real-time data
-- Holiday information for both US and Canada
-- Additional features that may impact border traffic
+- Data: 5-minute measured delay and volume per lane from the Cascade Gateway Border Data Warehouse,
+  used both for training (since 2023) and as the live input
+- Models per lane: a typical-delay profile by month, weekday and hour with Canadian and US holiday
+  adjustments, and LightGBM models that correct it from the latest readings
+- Web app comparing both crossings now, over the next 12 hours, and for a planned crossing time
 
 ## Project Structure
 
 ```
-├── src/
-│   └── border_predictor/
-│       ├── data/         # Data loading and processing
-│       ├── models/       # Prophet model implementation
-│       ├── utils/        # Helper functions
-│       └── config/       # Configuration files
-├── tests/                # Unit tests
-├── static/               # Static files for web interface
-├── templates/            # HTML templates for web interface
-├── requirements.txt      # Project dependencies
-└── README.md             # Project documentation
+├── src/border_predictor/
+│   ├── cascade.py         # Cascade Gateway download and live readings
+│   ├── baseline.py        # Typical-delay profile with holiday and live adjustments
+│   ├── train_baseline.py  # Tune and save the baseline per lane
+│   ├── gbm.py             # LightGBM features, training, evaluation and forecasts
+│   ├── evaluate.py        # Hour-by-hour backtest
+│   ├── predict.py         # Command-line predictions
+│   ├── service.py         # Model loading and cached live data for the web app
+│   ├── app.py             # Flask web app and JSON API
+│   ├── collector.py       # CBP posted wait-time recorder
+│   └── config/            # Configuration
+├── tests/
+├── static/, templates/    # Web interface
+└── data/                  # CBP monthly tables; Cascade downloads and collected data (gitignored)
 ```
 
 ## Installation
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/CanUSABorderCrossingPredictor.git
+git clone https://github.com/ayush-bharti/CanUSABorderCrossingPredictor.git
 cd CanUSABorderCrossingPredictor
 ```
 
@@ -126,89 +129,24 @@ about 5 minutes and under-reports long waits compared with Cascade's measured de
 python -m border_predictor.collector
 ```
 
-### Training and Fine-tuning the Model (Prophet, legacy)
-
-```bash
-# Train the initial model using historical data
-python -m border_predictor.models.train_model
-
-# Start live data collection and model fine-tuning
-python -m border_predictor.models.live_data_daemon
-
-python -m border_predictor.models.live_model_tuner
-
-# Evaluate model performance with live data
-python -m border_predictor.models.evaluate_live
-```
-
-The live data daemon process:
-1. Collects live wait times every 15 minutes
-2. Fine-tunes the model when sufficient new data is available (default: 96 new data points)
-3. Benchmarks predictions against actual wait times
-4. Adjusts hyperparameters based on performance
-
-#### Running the Live Data Daemon
-
-To run the daemon in the foreground:
-```bash
-python -m border_predictor.models.live_data_daemon
-```
-
-To run in the background with logging:
-```bash
-nohup python -m border_predictor.models.live_data_daemon > daemon.log 2>&1 &
-```
-
-To check the daemon's status:
-```bash
-tail -f daemon.log  # View real-time logs
-ps aux | grep live_data_daemon  # Check if daemon is running
-```
-
-To stop the daemon:
-```bash
-pkill -f "python -m border_predictor.models.live_data_daemon"
-```
-
-#### Model Fine-tuning Parameters
-
-The fine-tuning process can be configured with these parameters:
-- `collection_interval`: Time between data collection (default: 15 minutes)
-- `retraining_threshold`: Number of new data points before retraining (default: 96)
-- `max_retrain_window`: Maximum historical data window for retraining (default: 336 hours)
-
-These parameters can be adjusted in the `config/model_config.yaml` file.
-
-### Making Predictions
-
-```bash
-# Predict wait times for specific future dates and times
-python -m border_predictor.test_future_prediction
-```
-
-### Visualization and Analysis
-
-The prediction outputs include:
-- Wait time prediction in minutes
-- 95% confidence intervals for predictions
-- Visualizations of predictions with time series graphs
-
 ### Web Interface
 
-A Flask-based web interface is available for interactive predictions:
-
 ```bash
-# Start the web server
-python -m border_predictor.app
+python run.py                                            # http://127.0.0.1:5000
 ```
 
-Then navigate to http://localhost:5000 in your browser to access the interface.
+The home page compares both crossings for a chosen direction and lane type: the latest reading, the
+next 12 hours, and any hour in the next two weeks. Hours beyond LightGBM's week, or when Cascade cannot
+be reached, show the typical delay instead. The visualize page shows each lane's typical delay by
+weekday and hour. It needs trained models (`python -m border_predictor.gbm train`) and
+`CASCADE_API_KEY`. JSON is at `/api/forecast?direction=south&kind=cars&hours=12` and
+`/api/plan?direction=north&kind=nexus&at=2026-12-24%2015:00`.
 
 ## Data Sources
 
-- Historical border crossing wait times
-- US and Canadian holiday calendars
-- [Additional data sources will be listed here]
+- [Cascade Gateway Border Data Warehouse](https://www.cascadegatewaydata.com/) (Whatcom Council of Governments)
+- [CBP Border Wait Times](https://bwt.cbp.gov/) posted wait times
+- Canadian (BC) and US (WA) holiday calendars from the `holidays` package
 
 ## License
 

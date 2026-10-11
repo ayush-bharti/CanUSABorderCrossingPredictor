@@ -3,100 +3,42 @@
 {% block title %}About - Border Crossing Predictor{% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-md-12">
-        <div class="card mb-4">
-            <div class="card-header bg-primary text-white">
-                <h4><i class="fas fa-info-circle"></i> About the Project</h4>
-            </div>
-            <div class="card-body">
-                <h5>Border Crossing Wait Time Predictor</h5>
-                <p>
-                    This project aims to predict wait times at the Blaine Peace Arch border crossing between Vancouver and Seattle
-                    using machine learning techniques. By analyzing historical patterns and incorporating current conditions,
-                    we provide accurate predictions to help travelers plan their border crossings more efficiently.
-                </p>
-                
-                <h5>The Model</h5>
-                <p>
-                    We use Facebook's Prophet forecasting library, which is designed for time series data with strong seasonal patterns.
-                    Our model incorporates:
-                </p>
-                <ul>
-                    <li>Daily patterns (rush hours vs. off-peak times)</li>
-                    <li>Weekly patterns (weekday vs. weekend differences)</li>
-                    <li>Monthly and yearly seasonality</li>
-                    <li>Holiday effects for both US and Canadian holidays</li>
-                    <li>Current wait time information (when available)</li>
-                </ul>
-                
-                <h5>Data Sources</h5>
-                <p>
-                    Our model is trained on historical border crossing wait time data, which includes:
-                </p>
-                <ul>
-                    <li>Historical average wait times by month, day, and time</li>
-                    <li>Current border wait time information</li>
-                    <li>US and Canadian holiday calendars</li>
-                </ul>
-                
-                <h5>How to Use</h5>
-                <p>
-                    To get a prediction:
-                </p>
-                <ol>
-                    <li>Go to the <a href="{{ url_for('index') }}">Home</a> page</li>
-                    <li>Select your target date and time</li>
-                    <li>Optionally, enter the current wait time if available</li>
-                    <li>Click "Predict Wait Time" to see the results</li>
-                </ol>
-                
-                <h5>Visualizations</h5>
-                <p>
-                    Visit the <a href="{{ url_for('visualize') }}">Visualize</a> page to explore historical patterns in border crossing wait times,
-                    including hourly, daily, and monthly trends.
-                </p>
-            </div>
-        </div>
-        
-        <div class="card">
-            <div class="card-header bg-primary text-white">
-                <h4><i class="fas fa-code"></i> Technical Details</h4>
-            </div>
-            <div class="card-body">
-                <h5>Technologies Used</h5>
-                <ul>
-                    <li><strong>Prophet</strong>: Facebook's time series forecasting library</li>
-                    <li><strong>Python</strong>: Core programming language</li>
-                    <li><strong>Pandas</strong>: Data manipulation and analysis</li>
-                    <li><strong>Flask</strong>: Web application framework</li>
-                    <li><strong>Plotly</strong>: Interactive data visualizations</li>
-                    <li><strong>Bootstrap</strong>: Frontend styling and components</li>
-                </ul>
-                
-                <h5>Model Performance</h5>
-                <p>
-                    Our model achieves high accuracy in predicting border crossing wait times, with performance metrics including:
-                </p>
-                <ul>
-                    <li>Mean Absolute Error (MAE): Measures the average magnitude of errors</li>
-                    <li>Mean Absolute Percentage Error (MAPE): Expresses accuracy as a percentage</li>
-                    <li>Root Mean Squared Error (RMSE): Gives higher weight to larger errors</li>
-                </ul>
-                
-                <h5>Future Improvements</h5>
-                <p>
-                    We're continuously working to improve the model's accuracy and features:
-                </p>
-                <ul>
-                    <li>Incorporating weather data</li>
-                    <li>Adding special event information</li>
-                    <li>Implementing real-time updates</li>
-                    <li>Expanding to additional border crossings</li>
-                    <li>Developing a mobile application</li>
-                </ul>
-            </div>
-        </div>
+<div class="card mb-4">
+    <div class="card-header bg-primary text-white">
+        <h4 class="mb-0"><i class="fas fa-info-circle"></i> How the predictions work</h4>
+    </div>
+    <div class="card-body">
+        <h5>Data</h5>
+        <p>
+            Predictions come from the <a href="https://www.cascadegatewaydata.com/">Cascade Gateway Border Data Warehouse</a>,
+            which records the measured delay in every lane every 5 minutes from road sensors, for Peace Arch and Pacific Highway
+            in both directions. The models learn from data since January 2023, after the COVID border restrictions ended.
+        </p>
+
+        <h5>Model</h5>
+        <p>Each lane has two models:</p>
+        <ul>
+            <li>
+                <strong>A typical-delay profile</strong> for each month, weekday and hour, adjusted for Canadian and US holidays
+                and the days around them.
+            </li>
+            <li>
+                <strong>A gradient-boosted model (LightGBM)</strong> that starts from the profile and corrects it using the last
+                few hours of delay and traffic volume, the same hour a day and a week earlier, and how far the day is from a holiday.
+                It covers up to a week ahead; beyond that the page shows the typical delay.
+            </li>
+        </ul>
+
+        <h5>Accuracy</h5>
+        <p>
+            Tested on October 2025 to September 2026, a year the models never saw while being built, for southbound cars at
+            Peace Arch the predicted hourly delay was off by 5 minutes on average one hour ahead and about 7 minutes a day or a
+            week ahead. It flagged 70% of hours with a delay over 30 minutes one hour ahead. Northbound and NEXUS delays are
+            usually short and predicted within 1 to 3 minutes, but the rare long northbound waits are mostly missed.
+        </p>
+        <p class="text-muted mb-0">
+            Delays are the time spent queueing as measured by the sensors, which can differ from the wait times CBP and CBSA post.
+        </p>
     </div>
 </div>
 {% endblock %}

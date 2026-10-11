@@ -11,7 +11,7 @@
     <!-- Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <!-- Plotly.js -->
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
     {% block head %}{% endblock %}
 </head>
 <body>
@@ -58,7 +58,7 @@
                 <div class="col-lg-6 col-md-12 mb-4 mb-md-0">
                     <h5 class="text-uppercase">Border Crossing Predictor</h5>
                     <p>
-                        A machine learning model to predict wait times at the Blaine Peace Arch border crossing between Vancouver and Seattle.
+                        Delay predictions for the Peace Arch and Pacific Highway crossings between Vancouver and Seattle, in both directions.
                     </p>
                 </div>
                 <div class="col-lg-6 col-md-12 mb-4 mb-md-0">
@@ -78,7 +78,7 @@
             </div>
         </div>
         <div class="text-center p-3" style="background-color: rgba(0, 0, 0, 0.05);">
-            © 2025 Border Crossing Predictor
+            Delay data: Cascade Gateway Border Data Warehouse (Whatcom Council of Governments)
         </div>
     </footer>
 
