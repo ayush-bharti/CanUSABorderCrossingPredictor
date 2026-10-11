@@ -17,6 +17,7 @@ setup(
         "flask>=2.3.2",
         "flask-wtf>=1.1.1",
         "holidays>=0.25",
+        "lightgbm>=4.5.0",
     ],
     python_requires=">=3.8",
     author="Your Name",

@@ -67,11 +67,36 @@ available, its gap from the profile is carried forward and fades out exponential
 How the profile is built, how much of each holiday effect to keep, and how fast the live reading fades
 are chosen per lane on a validation year. `train_baseline` does that tuning, refits on all data since
 2023 and saves `models/baseline_lane<id>.json` (gitignored, since it is derived from Cascade data).
-`predict` loads that model and anchors it on Cascade's current reading for the lane.
 
 ```bash
 python -m border_predictor.train_baseline                # all lanes; --lanes 4 5 for a subset
+```
+
+### LightGBM Predictor
+
+`border_predictor.gbm` trains LightGBM models per lane for three ranges of hours ahead (up to 6, 7 to 24,
+and 25 to 168), each with its own early stopping, since one model stopped on every horizon at once
+under-fits the next few hours. Its inputs are what is known at prediction time: the latest readings, the previous three hours of delay
+and volume, the same hour a day and a week before the target when already known, calendar and
+holiday-distance features for the target hour, and the baseline's own prediction. It learns
+corrections to the baseline, chiefly how a building queue keeps building and how long-weekend travel
+days differ from the holidays themselves. `train` also refreshes the lane's baseline, then saves
+`models/gbm_lane<id>_upto<h>h.txt` (gitignored).
+
+```bash
+python -m border_predictor.gbm train                     # all lanes; --lanes 4 for one
+python -m border_predictor.gbm evaluate --lanes 4        # compare with the baseline on the test year
+```
+
+### Predicting
+
+`predict` fetches the lane's last nine days of readings from Cascade and prints LightGBM's prediction
+for each hour, with the baseline's next to it. With `--model baseline` it uses the baseline anchored on
+Cascade's current reading, and with `--no-live` the baseline's historical profile alone.
+
+```bash
 python -m border_predictor.predict                       # Peace Arch South Cars, next 12 hours
+python -m border_predictor.predict --lane 5 --hours 48
 python -m border_predictor.predict --lane 5 --at "2026-12-24 15:00" --hours 6 --no-live
 ```
 
@@ -83,7 +108,7 @@ an hour 0 to 168 hours ahead. Settings are tuned on Oct 2024 - Sep 2025, the mod
 Jan 2023 - Sep 2025, and it is scored once on Oct 2025 - Sep 2026. It reports mean absolute error,
 error on hours over 30 minutes, and how many of those hours were flagged (recall) and how many flags
 were right (precision), next to two references: the last reading and the profile alone. Periods are
-in `EVALUATION_CONFIG`.
+in `EVALUATION_CONFIG`. `gbm evaluate` scores LightGBM on the same rows.
 
 ```bash
 python -m border_predictor.evaluate --lanes 4

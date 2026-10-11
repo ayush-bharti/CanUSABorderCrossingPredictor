@@ -32,6 +32,7 @@ ENV/
 models/*.pkl
 models/*.joblib
 models/*.json
+models/*.txt
 !models/.gitkeep
 
 # Environment variables
