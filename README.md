@@ -44,38 +44,6 @@ pip install -r requirements.txt
 
 ## Usage
 
-### Collecting Wait Times
-
-`border_predictor.collector` fetches the CBP feed once and appends new readings for the
-Cascade Gateway ports (Peace Arch, Pacific Highway, Lynden, Sumas) to `data/collected/YYYY-MM.csv`.
-Rows are keyed on CBP's own update time, so running it more often than CBP updates (hourly)
-never creates duplicates.
-
-```bash
-python -m border_predictor.collector
-```
-
-It is meant to run on a schedule from an always-on machine. `.github/workflows/collect.yml`
-runs it once an hour (20 minutes past) on GitHub Actions and commits new readings once the repo is pushed
-to GitHub. A laptop cron entry works as a fallback but leaves gaps whenever the machine sleeps:
-
-```
-20 * * * * cd /path/to/CanUSABorderCrossingPredictor && venv/bin/python -m border_predictor.collector >> collector.log 2>&1
-```
-
-### Baseline Predictions
-
-`border_predictor.baseline` predicts from the CBP historical averages for (month, weekday, hour),
-optionally scaled on US/WA and Canada/BC holidays and the days next to them (multipliers are 1.0,
-i.e. off, until fitted from data). When a current reading is available, its gap from the historical
-average is carried forward and fades out over a few hours. Tunables live in `BASELINE_CONFIG` in
-`config/config.py`.
-
-```bash
-python -m border_predictor.predict                       # next 12 hours from now, using the live reading
-python -m border_predictor.predict --at "2026-12-24 15:00" --hours 6 --no-live
-```
-
 ### Cascade Gateway History
 
 `border_predictor.cascade` downloads 5-minute delay, volume and data-availability readings from the
@@ -87,6 +55,50 @@ are skipped, so the command can be re-run to resume or to add new months.
 ```bash
 python -m border_predictor.cascade                       # 2007-01 through last full month
 python -m border_predictor.cascade --start 2026-09 --end 2026-09
+```
+
+### Baseline Predictor
+
+`border_predictor.baseline` predicts a lane's mean delay for an hour from a typical (month, weekday,
+hour) profile fitted on ordinary days since 2023 (after the COVID border closure), scaled by multipliers
+fitted for Canada/BC and US/WA holidays and the two days either side of them. When a live reading is
+available, its gap from the profile is carried forward and fades out exponentially.
+
+How the profile is built, how much of each holiday effect to keep, and how fast the live reading fades
+are chosen per lane on a validation year. `train_baseline` does that tuning, refits on all data since
+2023 and saves `models/baseline_lane<id>.json` (gitignored, since it is derived from Cascade data).
+`predict` loads that model and anchors it on Cascade's current reading for the lane.
+
+```bash
+python -m border_predictor.train_baseline                # all lanes; --lanes 4 5 for a subset
+python -m border_predictor.predict                       # Peace Arch South Cars, next 12 hours
+python -m border_predictor.predict --lane 5 --at "2026-12-24 15:00" --hours 6 --no-live
+```
+
+### Evaluation
+
+`border_predictor.evaluate` replays history hour by hour. At each hour the predictor sees only the
+live reading available then (mean of the last three 5-minute readings) and predicts the mean delay of
+an hour 0 to 168 hours ahead. Settings are tuned on Oct 2024 - Sep 2025, the model is refit on
+Jan 2023 - Sep 2025, and it is scored once on Oct 2025 - Sep 2026. It reports mean absolute error,
+error on hours over 30 minutes, and how many of those hours were flagged (recall) and how many flags
+were right (precision), next to two references: the last reading and the profile alone. Periods are
+in `EVALUATION_CONFIG`.
+
+```bash
+python -m border_predictor.evaluate --lanes 4
+```
+
+### CBP Collector
+
+`border_predictor.collector` records the wait times CBP posts for Peace Arch, Pacific Highway, Lynden
+and Sumas into `data/collected/YYYY-MM.csv`, keyed on CBP's own update time so repeated polling never
+creates duplicates. It is a record of what travellers are shown, not model input: CBP posts a floor of
+about 5 minutes and under-reports long waits compared with Cascade's measured delay.
+`.github/workflows/collect.yml` runs it once an hour (20 minutes past) on GitHub Actions.
+
+```bash
+python -m border_predictor.collector
 ```
 
 ### Training and Fine-tuning the Model (Prophet, legacy)

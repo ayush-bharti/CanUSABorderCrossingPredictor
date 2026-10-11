@@ -4,13 +4,14 @@ Data is saved as one CSV per lane per month under data/cascade/<lane_id>/YYYY-MM
 Months already on disk are skipped, so the download can be stopped and resumed.
 Requires CASCADE_API_KEY in the environment or in the project's .env file.
 """
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 import argparse
 import os
 import time
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
+import pandas as pd
 import requests
 
 from border_predictor.config.config import CASCADE_CONFIG, PROJECT_ROOT
@@ -70,6 +71,72 @@ def fetch_month(lane_id: int, year: int, month: int, key: str, config: Dict) -> 
         # requests' own errors embed the full URL, which contains the key
         raise RuntimeError(f"Lane {lane_id} {year}-{month:02d}: HTTP {response.status_code}")
     return response.text
+
+
+def load_lane(lane_id: int, config: Optional[Dict] = None) -> pd.DataFrame:
+    """
+    Load every downloaded month for a lane.
+
+    Args:
+        lane_id: Cascade crossing lane ID.
+        config: Cascade configuration. Defaults to CASCADE_CONFIG.
+
+    Returns:
+        DataFrame indexed by local timestamp with delay, vol and avail columns.
+
+    Raises:
+        FileNotFoundError: If nothing has been downloaded for the lane.
+    """
+    config = config or CASCADE_CONFIG
+    paths = sorted((Path(config["output_dir"]) / str(lane_id)).glob("*.csv"))
+    if not paths:
+        raise FileNotFoundError(f"No Cascade data for lane {lane_id}; run python -m border_predictor.cascade")
+    df = pd.concat(pd.read_csv(p) for p in paths)
+    df.columns = ["ts", "delay", "vol", "avail"]
+    df["ts"] = pd.to_datetime(df["ts"])
+    return df.set_index("ts").sort_index()
+
+
+def hourly_delay(lane: pd.DataFrame) -> pd.Series:
+    """
+    Average delay per clock hour, left-labelled (10:00 covers 10:00-10:55).
+
+    Args:
+        lane: Output of load_lane.
+
+    Returns:
+        Series of mean delay in minutes; NaN where the lane reported nothing.
+    """
+    return lane["delay"].resample("H").mean()
+
+
+def fetch_current_delay(lane_id: int, config: Optional[Dict] = None) -> Optional[Tuple[datetime, float]]:
+    """
+    Fetch the lane's current delay reading.
+
+    Args:
+        lane_id: Cascade crossing lane ID.
+        config: Cascade configuration. Defaults to CASCADE_CONFIG.
+
+    Returns:
+        (naive local reading time, delay in minutes), or None if the lane has no current reading.
+
+    Raises:
+        RuntimeError: On a non-200 response. The message never includes the key.
+    """
+    config = config or CASCADE_CONFIG
+    key = load_api_key()
+    url = config["api_url"].rstrip("/") + f"/CurrentDelay/{lane_id}"
+    response = requests.get(url, params={"format": "json", "key": key}, timeout=config["timeout_seconds"])
+    if response.status_code != 200:
+        raise RuntimeError(f"Current delay for lane {lane_id}: HTTP {response.status_code}")
+    body = response.json()
+    starts, values = body.get("GroupStarts") or [], body.get("Values") or []
+    if not starts or not values or not values[0] or values[0][0] is None:
+        return None
+    # The epoch encodes the crossing's local wall-clock time, not UTC
+    reading_time = datetime.fromtimestamp(starts[0], timezone.utc).replace(tzinfo=None)
+    return reading_time, float(values[0][0])
 
 
 def download(start: date, end: date, config: Optional[Dict] = None) -> None:

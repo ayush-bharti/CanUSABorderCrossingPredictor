@@ -81,17 +81,26 @@ CASCADE_CONFIG = {
     "request_delay_seconds": 0.5,
 }
 
+# Walk-forward evaluation on Cascade history. Training starts after the COVID border closure.
+EVALUATION_CONFIG = {
+    "train_start": "2023-01-01",
+    "train_end": "2024-09-30",
+    "validation_start": "2024-10-01",
+    "validation_end": "2025-09-30",
+    "test_start": "2025-10-01",
+    "test_end": "2026-09-30",
+    "horizons": [0, 1, 2, 3, 6, 12, 24, 72, 168],
+    "decay_grid_minutes": [30, 60, 120, 180, 300, 480],
+    "holiday_shrinkage_grid": [0.0, 0.25, 0.5, 1.0],
+    "spike_minutes": 30,
+}
+
 # Baseline predictor configuration
+# Profile, holiday multipliers and nowcast decay are fitted per lane by train_baseline.
 BASELINE_CONFIG = {
-    "port_number": "300402",  # Peace Arch
-    "lane": "passenger_standard",
+    "default_lane_id": 4,  # Peace Arch South Cars
     "timezone": "America/Vancouver",
-    # Multipliers applied to the historical profile. Off (1.0) until fitted: guessed values raised
-    # error in the May 2025 backtest.
-    "holiday_multiplier": 1.0,
-    "holiday_adjacent_multiplier": 1.0,
-    # How fast the gap between the latest reading and the profile fades (minutes)
-    "nowcast_decay_minutes": 180.0,
+    "model_dir": MODELS_DIR,
 }
 
 # Web application configuration
