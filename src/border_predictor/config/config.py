@@ -73,8 +73,19 @@ WEB_CONFIG = {
 
 # LightGBM predictor configuration (see gbm.py)
 GBM_CONFIG = {
-    # l1 targets the median (lowest MAE); l2 targets the mean, which reaches higher on spikes
-    "objectives": ["l1", "l2"],
+    # Models trained per lane and band. median (l1) is the prediction: it had lower MAE than l2 (mean).
+    # low/high bound an 80% interval. spike is the probability the hour's mean delay exceeds
+    # EVALUATION_CONFIG["spike_minutes"]; it is trained only for lanes with spike_min_positives such
+    # hours in the training period, and alerts above a threshold picked per band for F1 on validation.
+    "models": {
+        "median": {"objective": "l1"},
+        "low": {"objective": "quantile", "alpha": 0.1},
+        "high": {"objective": "quantile", "alpha": 0.9},
+        "spike": {"objective": "binary"},
+    },
+    "spike_min_positives": 200,
+    # Add every other lane's live reading and last-hour delay as features
+    "cross_lane": True,
     # One model per band of horizons (hours ahead), each with its own early stopping: a single model
     # stopped on all horizons at once under-fits the short range. A band predicts every horizon up to
     # up_to (from the previous band's up_to + 1) and trains on train_on. The long-range band trains on
@@ -84,8 +95,6 @@ GBM_CONFIG = {
         {"up_to": 24, "train_on": list(range(7, 25))},
         {"up_to": 168, "train_on": list(range(0, 25)) + list(range(30, 169, 6))},
     ],
-    # Objective used by train/predict
-    "objective": "l1",
     "max_rounds": 3000,
     "early_stopping_rounds": 100,
     "params": {

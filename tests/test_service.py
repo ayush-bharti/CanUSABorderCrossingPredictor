@@ -6,8 +6,9 @@ import pandas as pd
 import pytest
 
 from border_predictor import app as app_module
-from border_predictor import service
+from border_predictor import gbm, service
 from border_predictor.baseline import BaselinePredictor
+from border_predictor.evaluate import live_readings
 
 
 def test_lanes_parse_crossing_direction_and_kind():
@@ -36,8 +37,8 @@ def test_forecast_falls_back_to_profile_when_cascade_fails(flat_baseline):
     forecaster = make_forecaster(flat_baseline, failing)
     result = forecaster.forecast(4, [datetime(2026, 10, 21, 12, 30)])
     assert result["latest"] is None
-    assert result["hours"] == [{"time": datetime(2026, 10, 21, 12), "delay": 10.0,
-                                "source": "profile", "day_type": "normal"}]
+    assert result["hours"] == [{"time": datetime(2026, 10, 21, 12), "delay": 10.0, "low": None, "high": None,
+                                "spike_chance": None, "spike_alert": None, "source": "profile", "day_type": "normal"}]
 
 
 def test_recent_readings_are_cached(flat_baseline):
@@ -78,3 +79,27 @@ def test_api_returns_both_crossings(flat_baseline, monkeypatch):
     assert client.get("/api/forecast?direction=east&kind=cars").status_code == 404
     for page in ("/", "/visualize", "/about"):
         assert client.get(page).status_code == 200
+
+
+def test_forecast_with_models_fetches_other_lanes(flat_baseline):
+    idx = pd.date_range("2026-10-01", "2026-10-21 10:25", freq="5min")
+    data = pd.DataFrame({"delay": 5.0, "vol": 1.0, "avail": 1}, index=idx)
+    hourly = data["delay"].resample("H").mean()
+    train = gbm.build_features(data, hourly, live_readings(data), flat_baseline, hourly["2026-10-02":"2026-10-20"].index,
+                               [0, 1, 2], others={5: (hourly, live_readings(data))})
+    features = gbm.feature_columns(train, cross_lane=True)
+    models = {kind: [gbm.fit_gbm(train, kind, 5, features=features)] * 3 for kind in ("median", "low", "high")}
+
+    fetched = []
+
+    def fetch(lane_id):
+        fetched.append(lane_id)
+        return data
+
+    forecaster = service.Forecaster(fetch=fetch)
+    forecaster._models = {4: (flat_baseline, models)}
+    hours = forecaster.forecast(4, [datetime(2026, 10, 21, 12)])["hours"]
+    assert sorted(fetched) == [4, 5]
+    assert hours[0]["source"] == "gbm"
+    assert hours[0]["low"] <= hours[0]["delay"] <= hours[0]["high"]
+    assert hours[0]["spike_chance"] is None and hours[0]["spike_alert"] is None

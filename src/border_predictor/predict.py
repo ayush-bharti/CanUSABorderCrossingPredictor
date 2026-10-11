@@ -1,10 +1,9 @@
 """Print delay predictions for a Cascade lane, anchored on its latest readings."""
-from typing import List
+from typing import Dict
 import argparse
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-import lightgbm as lgb
 
 from border_predictor import gbm
 from border_predictor.baseline import BaselinePredictor
@@ -19,19 +18,22 @@ def day_flag(predictor: BaselinePredictor, when: datetime) -> str:
     return "" if day_type == "normal" else f"  ({day_type.replace('_', ' ')})"
 
 
-def print_gbm(lane_id: int, predictor: BaselinePredictor, boosters: List[lgb.Booster], start: datetime, hours: int) -> None:
+def print_gbm(lane_id: int, predictor: BaselinePredictor, models: Dict, start: datetime, hours: int) -> None:
     """Hourly LightGBM predictions from the last days of readings."""
     recent = fetch_recent(lane_id)
     if recent.empty:
         raise SystemExit("No recent readings; try --model baseline --no-live")
     print(f"Latest reading: {recent['delay'].iloc[-1]:.0f} min at {recent.index[-1]:%Y-%m-%d %H:%M}")
+    others = {other: fetch_recent(other) for other in gbm.other_lanes_needed(models)}
     targets = [start + timedelta(hours=step) for step in range(hours + 1)]
-    result = gbm.forecast(recent, predictor, boosters, targets)
+    result = gbm.forecast(recent, predictor, models, targets, others)
     if result.empty:
         raise SystemExit("LightGBM predicts up to 168 hours past the latest reading; use --model baseline")
-    print("Mean delay for each hour (LightGBM; baseline in brackets)")
+    print("Mean delay for each hour (LightGBM, 80% range; baseline in brackets; ! = risk of over 30 min)")
     for hour, row in result.iterrows():
-        print(f"{hour:%a %Y-%m-%d %H:%M}  {row.gbm:5.1f} min  [{row.baseline:5.1f}]{day_flag(predictor, hour)}")
+        alert = " !" if row.get("spike_alert") else ""
+        print(f"{hour:%a %Y-%m-%d %H:%M}  {row.gbm:5.1f} min  ({row.low:4.0f}-{row.high:3.0f})  "
+              f"[{row.baseline:5.1f}]{alert}{day_flag(predictor, hour)}")
 
 
 def print_baseline(lane_id: int, predictor: BaselinePredictor, start: datetime, hours: int, live: bool) -> None:
@@ -65,11 +67,11 @@ def main() -> None:
     if not path.exists():
         raise SystemExit(f"No model at {path}; run python -m border_predictor.gbm train --lanes {args.lane}")
     predictor = BaselinePredictor.load(path)
-    boosters = gbm.load_boosters(args.lane)
-    model = args.model or ("gbm" if boosters and not args.no_live else "baseline")
+    models = gbm.load_models(args.lane)
+    model = args.model or ("gbm" if models and not args.no_live else "baseline")
     if model == "gbm" and args.no_live:
         raise SystemExit("LightGBM needs live readings; use --model baseline with --no-live")
-    if model == "gbm" and not boosters:
+    if model == "gbm" and not models:
         raise SystemExit(f"No LightGBM model; run python -m border_predictor.gbm train --lanes {args.lane}")
 
     now = datetime.now(ZoneInfo(BASELINE_CONFIG["timezone"])).replace(tzinfo=None)
@@ -77,7 +79,7 @@ def main() -> None:
 
     print(CASCADE_CONFIG["lanes"][args.lane])
     if model == "gbm":
-        print_gbm(args.lane, predictor, boosters, start, args.hours)
+        print_gbm(args.lane, predictor, models, start, args.hours)
     else:
         print_baseline(args.lane, predictor, start, args.hours, live=not args.no_live)
 

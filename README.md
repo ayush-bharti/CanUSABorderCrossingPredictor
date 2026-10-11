@@ -83,8 +83,15 @@ under-fits the next few hours. Its inputs are what is known at prediction time: 
 and volume, the same hour a day and a week before the target when already known, calendar and
 holiday-distance features for the target hour, and the baseline's own prediction. It learns
 corrections to the baseline, chiefly how a building queue keeps building and how long-weekend travel
-days differ from the holidays themselves. `train` also refreshes the lane's baseline, then saves
-`models/gbm_lane<id>_upto<h>h.txt` (gitignored).
+days differ from the holidays themselves. The other seven lanes' latest reading and last-hour delay are
+inputs too, since a queue in one lane often spills into another.
+
+Each band has four models: the median (the prediction), the 10% and 90% quantiles (a range the delay
+falls in 8 times out of 10), and, for the car lanes with enough history of it, a classifier for the
+chance that the hour averages over 30 minutes. Its alert threshold is picked per band for the best F1
+on the validation year. `train` also refreshes the lane's baseline, then saves
+`models/gbm_lane<id>_<model>_upto<h>h.txt` and the thresholds in `models/gbm_lane<id>_meta.json`
+(gitignored).
 
 ```bash
 python -m border_predictor.gbm train                     # all lanes; --lanes 4 for one
@@ -93,8 +100,8 @@ python -m border_predictor.gbm evaluate --lanes 4        # compare with the base
 
 ### Predicting
 
-`predict` fetches the lane's last nine days of readings from Cascade and prints LightGBM's prediction
-for each hour, with the baseline's next to it. With `--model baseline` it uses the baseline anchored on
+`predict` fetches the last nine days of readings from Cascade and prints LightGBM's prediction for each
+hour with its 80% range and spike alert, and the baseline's next to it. With `--model baseline` it uses the baseline anchored on
 Cascade's current reading, and with `--no-live` the baseline's historical profile alone.
 
 ```bash
