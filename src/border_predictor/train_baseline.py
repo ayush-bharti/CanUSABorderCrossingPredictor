@@ -3,6 +3,7 @@
 Settings are chosen on the validation period (see evaluate.tune), then the
 model is refit on all data from the start of training to the latest download.
 """
+from typing import Dict, Tuple
 import argparse
 from pathlib import Path
 
@@ -17,7 +18,7 @@ def model_path(lane_id: int) -> Path:
     return Path(BASELINE_CONFIG["model_dir"]) / f"baseline_lane{lane_id}.json"
 
 
-def train_lane(lane_id: int) -> BaselinePredictor:
+def train_lane(lane_id: int) -> Tuple[BaselinePredictor, Dict]:
     """
     Tune, refit on all data since training start, and save one lane's model.
 
@@ -25,7 +26,7 @@ def train_lane(lane_id: int) -> BaselinePredictor:
         lane_id: Cascade crossing lane ID.
 
     Returns:
-        The fitted model.
+        The fitted model and the chosen fit settings.
     """
     lane = load_lane(lane_id)
     hourly = hourly_delay(lane)
@@ -33,7 +34,7 @@ def train_lane(lane_id: int) -> BaselinePredictor:
     model = BaselinePredictor.fit(hourly[EVALUATION_CONFIG["train_start"]:], **settings)
     model.save(model_path(lane_id))
     print(f"{CASCADE_CONFIG['lanes'][lane_id]} (lane {lane_id}): {settings} -> {model_path(lane_id)}")
-    return model
+    return model, settings
 
 
 def main() -> None:

@@ -4,12 +4,14 @@ Data is saved as one CSV per lane per month under data/cascade/<lane_id>/YYYY-MM
 Months already on disk are skipped, so the download can be stopped and resumed.
 Requires CASCADE_API_KEY in the environment or in the project's .env file.
 """
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Union
 import argparse
+import io
 import os
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import requests
@@ -38,14 +40,14 @@ def load_api_key() -> str:
     return key
 
 
-def fetch_month(lane_id: int, year: int, month: int, key: str, config: Dict) -> str:
+def fetch_range(lane_id: int, start: date, end: date, key: str, config: Dict) -> str:
     """
-    Fetch one month of 5-minute data for a lane as CSV text.
+    Fetch 5-minute data for a lane over a date range (inclusive) as CSV text.
 
     Args:
         lane_id: Cascade crossing lane ID.
-        year: Year to fetch.
-        month: Month to fetch.
+        start: First local date.
+        end: Last local date. Today returns readings up to the latest poll.
         key: API key.
         config: Cascade configuration.
 
@@ -55,11 +57,10 @@ def fetch_month(lane_id: int, year: int, month: int, key: str, config: Dict) -> 
     Raises:
         RuntimeError: On a non-200 response. The message never includes the key.
     """
-    last_day = (date(year + month // 12, month % 12 + 1, 1) - date(year, month, 1)).days
     params = {
         "id": lane_id,
-        "start": f"{month:02d}/01/{year}",
-        "end": f"{month:02d}/{last_day:02d}/{year}",
+        "start": start.strftime("%m/%d/%Y"),
+        "end": end.strftime("%m/%d/%Y"),
         "data": config["metrics"],
         "dg": "Day",
         "tg": "Poll",
@@ -69,8 +70,44 @@ def fetch_month(lane_id: int, year: int, month: int, key: str, config: Dict) -> 
     response = requests.get(config["api_url"], params=params, timeout=config["timeout_seconds"])
     if response.status_code != 200:
         # requests' own errors embed the full URL, which contains the key
-        raise RuntimeError(f"Lane {lane_id} {year}-{month:02d}: HTTP {response.status_code}")
+        raise RuntimeError(f"Lane {lane_id} {start}..{end}: HTTP {response.status_code}")
     return response.text
+
+
+def fetch_month(lane_id: int, year: int, month: int, key: str, config: Dict) -> str:
+    """Fetch one calendar month for a lane as CSV text (see fetch_range)."""
+    last_day = date(year + month // 12, month % 12 + 1, 1) - timedelta(days=1)
+    return fetch_range(lane_id, date(year, month, 1), last_day, key, config)
+
+
+def parse_csv(text: Union[str, Path]) -> pd.DataFrame:
+    """
+    Parse API CSV (text or a saved file) into ts-indexed delay, vol and avail columns.
+    """
+    df = pd.read_csv(io.StringIO(text) if isinstance(text, str) else text)
+    df.columns = ["ts", "delay", "vol", "avail"]
+    df["ts"] = pd.to_datetime(df["ts"])
+    return df.set_index("ts")
+
+
+def fetch_recent(lane_id: int, days: int = 9, config: Optional[Dict] = None) -> pd.DataFrame:
+    """
+    Fetch the last few days of 5-minute data for a lane, through the latest poll.
+
+    Args:
+        lane_id: Cascade crossing lane ID.
+        days: Calendar days to fetch, including today.
+        config: Cascade configuration. Defaults to CASCADE_CONFIG.
+
+    Returns:
+        DataFrame like load_lane, with polls not yet taken dropped.
+    """
+    config = config or CASCADE_CONFIG
+    key = load_api_key()
+    today = datetime.now(ZoneInfo(config["timezone"])).date()
+    df = parse_csv(fetch_range(lane_id, today - timedelta(days=days - 1), today, key, config))
+    last = df["avail"].gt(0) & df["delay"].notna()
+    return df[: df.index[last][-1]] if last.any() else df.iloc[:0]
 
 
 def load_lane(lane_id: int, config: Optional[Dict] = None) -> pd.DataFrame:
@@ -91,10 +128,7 @@ def load_lane(lane_id: int, config: Optional[Dict] = None) -> pd.DataFrame:
     paths = sorted((Path(config["output_dir"]) / str(lane_id)).glob("*.csv"))
     if not paths:
         raise FileNotFoundError(f"No Cascade data for lane {lane_id}; run python -m border_predictor.cascade")
-    df = pd.concat(pd.read_csv(p) for p in paths)
-    df.columns = ["ts", "delay", "vol", "avail"]
-    df["ts"] = pd.to_datetime(df["ts"])
-    return df.set_index("ts").sort_index()
+    return pd.concat(parse_csv(p) for p in paths).sort_index()
 
 
 def hourly_delay(lane: pd.DataFrame) -> pd.Series:
