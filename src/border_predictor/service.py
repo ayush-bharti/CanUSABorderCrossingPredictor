@@ -4,6 +4,7 @@ import logging
 import re
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -58,12 +59,12 @@ class Forecaster:
         self._lock = threading.Lock()
 
     def models(self, lane_id: int):
-        """(baseline, boosters) for a lane; boosters is None if LightGBM is not trained."""
+        """(baseline, LightGBM models as gbm.load_models returns them) for a lane; None if not trained."""
         if lane_id not in self._models:
             path = model_path(lane_id)
             if not path.exists():
                 raise FileNotFoundError(f"No baseline for lane {lane_id}; run python -m border_predictor.gbm train")
-            self._models[lane_id] = (BaselinePredictor.load(path), gbm.load_boosters(lane_id))
+            self._models[lane_id] = (BaselinePredictor.load(path), gbm.load_models(lane_id))
         return self._models[lane_id]
 
     def recent(self, lane_id: int) -> Optional[pd.DataFrame]:
@@ -86,32 +87,42 @@ class Forecaster:
         Predicted mean delay for the hour each target falls in.
 
         Returns:
-            {"latest": {"time", "delay"} or None, "hours": [{"time", "delay", "source", "day_type"}]}.
+            {"latest": {"time", "delay"} or None, "hours": [{"time", "delay", "low", "high",
+            "spike_chance", "spike_alert", "source", "day_type"}]}.
             source is "gbm" within LightGBM's range of the latest reading and
             "profile" otherwise (no live data, no trained model, or too far ahead).
+            low/high (80% range) are None for profile hours; spike_chance and
+            spike_alert are None for lanes without a spike classifier.
         """
-        baseline, boosters = self.models(lane_id)
+        baseline, models = self.models(lane_id)
         recent = self.recent(lane_id)
         hours = sorted({pd.Timestamp(t).floor("H") for t in targets})
-        latest, predicted = None, {}
+        latest, predicted = None, pd.DataFrame()
         if recent is not None and not recent.empty:
             latest = {"time": recent.index[-1].to_pydatetime(), "delay": float(recent["delay"].iloc[-1])}
-            if boosters:
-                result = gbm.forecast(recent, baseline, boosters, hours)
-                predicted = {t: float(v) for t, v in result["gbm"].items()}
+            if models:
+                others = gbm.other_lanes_needed(models)
+                with ThreadPoolExecutor(max_workers=8) as pool:
+                    others_recent = dict(zip(others, pool.map(self.recent, others)))
+                predicted = gbm.forecast(recent, baseline, models, hours, others_recent)
+
+        def value(row, column):
+            return float(row[column]) if column in row and pd.notna(row[column]) else None
 
         out = []
         for hour in hours:
-            if hour in predicted:
-                delay, source = predicted[hour], "gbm"
+            entry = {"low": None, "high": None, "spike_chance": None, "spike_alert": None}
+            if hour in predicted.index:
+                row = predicted.loc[hour]
+                entry.update(delay=float(row.gbm), source="gbm", low=value(row, "low"), high=value(row, "high"),
+                             spike_chance=value(row, "spike_prob"))
+                if "spike_alert" in row:
+                    entry["spike_alert"] = bool(row.spike_alert)
             else:
-                delay, source = baseline.expected((hour + timedelta(minutes=30)).to_pydatetime()), "profile"
-            out.append({
-                "time": hour.to_pydatetime(),
-                "delay": max(0.0, delay),
-                "source": source,
-                "day_type": baseline.calendar.day_type(hour.date()),
-            })
+                entry.update(delay=baseline.expected((hour + timedelta(minutes=30)).to_pydatetime()), source="profile")
+            entry.update(time=hour.to_pydatetime(), delay=max(0.0, entry["delay"]),
+                         day_type=baseline.calendar.day_type(hour.date()))
+            out.append(entry)
         return {"latest": latest, "hours": out}
 
     def typical_week(self, lane_id: int) -> pd.DataFrame:

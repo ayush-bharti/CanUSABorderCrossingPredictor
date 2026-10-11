@@ -1,14 +1,20 @@
 """Gradient boosted (LightGBM) delay predictor on Cascade Gateway history.
 
-One model per lane covers every horizon. Each row is an origin hour t and a
-horizon h; the target is the mean delay of the hour starting at t + h. Features
-use only what is known at t: the live reading, recent hourly delay and volume,
+Each row is an origin hour t and a horizon h; the target is the mean delay of
+the hour starting at t + h. Features use only what is known at t: the live
+reading, recent hourly delay and volume, the other lanes' current delay,
 calendar and holiday distance for the target hour, and the baseline's own
-prediction, so the model learns corrections to the baseline rather than the
+prediction, so the models learn corrections to the baseline rather than the
 whole pattern from scratch.
+
+Per lane and horizon band there is a median model (the prediction), 10% and
+90% quantile models (an 80% interval), and for busy lanes a classifier for the
+probability that the hour's delay exceeds the spike threshold.
 """
+from functools import lru_cache
 from typing import Dict, Iterable, List, Optional, Tuple
 import argparse
+import json
 import math
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -25,6 +31,8 @@ from border_predictor.config.config import BASELINE_CONFIG, CASCADE_CONFIG, EVAL
 from border_predictor.evaluate import live_readings, score, tune
 
 HOLIDAY_DISTANCE_CAP = 7
+# Hourly delay and live reading of another lane, used as cross-lane features
+LaneInputs = Tuple[pd.Series, pd.Series]
 
 
 def holiday_distances(days: Iterable[date]) -> pd.DataFrame:
@@ -56,12 +64,17 @@ def build_features(
     origins: pd.DatetimeIndex,
     horizons: Iterable[int],
     require_actual: bool = True,
+    others: Optional[Dict[int, LaneInputs]] = None,
 ) -> pd.DataFrame:
     """
     Feature rows for every origin hour and horizon.
 
     Rows without a live reading are dropped, and with require_actual rows
     without a target too, matching evaluate.backtest.
+
+    Args:
+        others: Hourly delay and live readings of other lanes by lane ID; adds
+            other<id>_live and other<id>_lag_1h columns.
 
     Returns:
         DataFrame with columns origin, h, actual, last_reading, baseline and the features.
@@ -87,6 +100,9 @@ def build_features(
         "expected_at_obs": [expected(t) for t in observed_at],
     })
     base["live_anomaly"] = base.live - base.expected_at_obs
+    for lane_id, (other_hourly, other_live) in sorted((others or {}).items()):
+        base[f"other{lane_id}_live"] = other_live.reindex(origins).values
+        base[f"other{lane_id}_lag_1h"] = other_hourly.reindex(origins - pd.Timedelta(hours=1)).values
 
     frames = []
     for h in horizons:
@@ -124,13 +140,42 @@ FEATURES = [
 ]
 
 
-def fit_gbm(train: pd.DataFrame, objective: str, num_rounds: int, valid: Optional[pd.DataFrame] = None):
-    """Train a LightGBM regressor; with valid, stop early on validation MAE."""
-    params = dict(GBM_CONFIG["params"], objective=objective, metric="l1", verbose=-1)
-    dtrain = lgb.Dataset(train[FEATURES], train.actual, categorical_feature=["day_type"])
+def feature_columns(df: pd.DataFrame, cross_lane: bool) -> List[str]:
+    """FEATURES plus, with cross_lane, the other-lane columns present in df."""
+    return FEATURES + ([c for c in df.columns if c.startswith("other")] if cross_lane else [])
+
+
+def fit_gbm(
+    train: pd.DataFrame,
+    kind: str,
+    num_rounds: int,
+    valid: Optional[pd.DataFrame] = None,
+    features: Optional[List[str]] = None,
+) -> lgb.Booster:
+    """
+    Train one model of a kind in GBM_CONFIG["models"]; with valid, stop early on it.
+
+    The spike kind is a classifier for actual > EVALUATION_CONFIG["spike_minutes"].
+    """
+    spec = GBM_CONFIG["models"][kind]
+    features = features or FEATURES
+    params = dict(GBM_CONFIG["params"], objective=spec["objective"], verbose=-1)
+    if spec["objective"] == "quantile":
+        params.update(alpha=spec["alpha"], metric="quantile")
+    elif spec["objective"] == "binary":
+        params["metric"] = "binary_logloss"
+    else:
+        params["metric"] = "l1"
+
+    def label(df):
+        if spec["objective"] == "binary":
+            return (df.actual > EVALUATION_CONFIG["spike_minutes"]).astype(int)
+        return df.actual
+
+    dtrain = lgb.Dataset(train[features], label(train), categorical_feature=["day_type"])
     if valid is None:
         return lgb.train(params, dtrain, num_boost_round=num_rounds)
-    dvalid = lgb.Dataset(valid[FEATURES], valid.actual, reference=dtrain)
+    dvalid = lgb.Dataset(valid[features], label(valid), reference=dtrain)
     return lgb.train(params, dtrain, num_boost_round=num_rounds, valid_sets=[dvalid],
                      callbacks=[lgb.early_stopping(GBM_CONFIG["early_stopping_rounds"], verbose=False)])
 
@@ -148,26 +193,6 @@ def training_horizons() -> List[int]:
     return sorted(set().union(*(b["train_on"] for b in GBM_CONFIG["bands"])))
 
 
-def fit_bands(
-    train: pd.DataFrame, valid: pd.DataFrame, full: pd.DataFrame, objective: str
-) -> Tuple[List[lgb.Booster], List[int]]:
-    """
-    One model per horizon band. Each band's round count is found by early
-    stopping train against valid, then the model is refit on full.
-
-    Returns:
-        The refit boosters and their round counts, in band order.
-    """
-    boosters, rounds = [], []
-    for band in GBM_CONFIG["bands"]:
-        def pick(df):
-            return df[df.h.isin(band["train_on"])]
-        stopped = fit_gbm(pick(train), objective, GBM_CONFIG["max_rounds"], pick(valid))
-        rounds.append(stopped.best_iteration)
-        boosters.append(fit_gbm(pick(full), objective, stopped.best_iteration))
-    return boosters, rounds
-
-
 def predict_bands(boosters: List[lgb.Booster], features: pd.DataFrame) -> np.ndarray:
     """Predict each row with its horizon band's model; NaN for rows past the last band."""
     out = np.full(len(features), np.nan)
@@ -175,25 +200,111 @@ def predict_bands(boosters: List[lgb.Booster], features: pd.DataFrame) -> np.nda
     for i, booster in enumerate(boosters):
         rows = (bands == i).values
         if rows.any():
-            out[rows] = np.maximum(0.0, booster.predict(features.loc[rows, FEATURES]))
+            out[rows] = np.maximum(0.0, booster.predict(features.loc[rows, booster.feature_name()]))
     return out
+
+
+def best_f1_threshold(prob: np.ndarray, is_spike: np.ndarray) -> float:
+    """Probability cut-off with the highest F1 for flagging spikes; 0.5 if there are none."""
+    if not is_spike.any():
+        return 0.5
+    best, best_f1 = 0.5, -1.0
+    for cut in np.arange(0.05, 0.96, 0.01):
+        flagged = prob >= cut
+        tp = (flagged & is_spike).sum()
+        f1 = 2 * tp / max(flagged.sum() + is_spike.sum(), 1)
+        if f1 > best_f1:
+            best, best_f1 = float(cut), f1
+    return round(best, 2)
+
+
+def fit_bands(
+    train: pd.DataFrame, valid: pd.DataFrame, full: pd.DataFrame, kind: str, features: List[str]
+) -> Tuple[List[lgb.Booster], List[int], np.ndarray]:
+    """
+    One model per horizon band. Each band's round count is found by early
+    stopping train against valid, then the model is refit on full.
+
+    Returns:
+        The refit boosters and their round counts, in band order, and the
+        early-stopped models' predictions on valid (for picking thresholds).
+    """
+    boosters, rounds, stopped_models = [], [], []
+    for band in GBM_CONFIG["bands"]:
+        def pick(df):
+            return df[df.h.isin(band["train_on"])]
+        stopped = fit_gbm(pick(train), kind, GBM_CONFIG["max_rounds"], pick(valid), features)
+        stopped_models.append(stopped)
+        rounds.append(stopped.best_iteration)
+        boosters.append(fit_gbm(pick(full), kind, stopped.best_iteration, features=features))
+    return boosters, rounds, predict_bands(stopped_models, valid)
+
+
+def band_thresholds(valid: pd.DataFrame, prob: np.ndarray) -> List[float]:
+    """Spike alert threshold per band, for the best F1 on the validation rows the band predicts."""
+    is_spike = (valid.actual > EVALUATION_CONFIG["spike_minutes"]).values
+    bands = valid.h.map(band_of).values
+    return [best_f1_threshold(prob[bands == i], is_spike[bands == i]) for i in range(len(GBM_CONFIG["bands"]))]
+
+
+def has_enough_spikes(hourly: pd.Series, config: Dict) -> bool:
+    """Whether a lane has enough spike hours in the training period for a classifier."""
+    train = hourly[config["train_start"]:config["train_end"]]
+    return int((train > config["spike_minutes"]).sum()) >= GBM_CONFIG["spike_min_positives"]
+
+
+@lru_cache(maxsize=None)
+def lane_history(lane_id: int) -> Tuple[pd.DataFrame, pd.Series, pd.Series]:
+    """A lane's 5-minute readings, hourly delay and live readings, loaded once per process."""
+    lane = load_lane(lane_id)
+    return lane, hourly_delay(lane), live_readings(lane)
+
+
+def other_lane_inputs(lane_id: int) -> Dict[int, LaneInputs]:
+    """Hourly delay and live readings of every other configured lane, if cross-lane features are on."""
+    if not GBM_CONFIG["cross_lane"]:
+        return {}
+    return {other: lane_history(other)[1:] for other in CASCADE_CONFIG["lanes"] if other != lane_id}
+
+
+def alert_scores(results: pd.DataFrame, rules: Dict[str, pd.Series], spike: float) -> pd.DataFrame:
+    """Recall and precision for flagging hours over the spike threshold, per horizon and rule."""
+    out = []
+    is_spike = results.actual > spike
+    for h, rows in results.groupby("h").groups.items():
+        for name, flagged in rules.items():
+            f, s = flagged.loc[rows], is_spike.loc[rows]
+            out.append({"h": h, "rule": name, "recall": (f & s).sum() / max(s.sum(), 1),
+                        "precision": (f & s).sum() / max(f.sum(), 1), "flags": int(f.sum()), "spikes": int(s.sum())})
+    return pd.DataFrame(out).set_index(["h", "rule"])
+
+
+def interval_scores(results: pd.DataFrame) -> pd.DataFrame:
+    """Share of hours inside [low, high] and the interval's mean width, per horizon."""
+    inside = (results.actual >= results.low) & (results.actual <= results.high)
+    return pd.DataFrame({
+        "coverage": inside.groupby(results.h).mean(),
+        "width": (results.high - results.low).groupby(results.h).mean(),
+    })
 
 
 def evaluate_lane(lane_id: int, config: Optional[Dict] = None) -> pd.DataFrame:
     """
     Compare LightGBM with the baseline on the test period.
 
-    Baseline settings are tuned as in evaluate. For each objective, each
-    horizon band's model is trained on the training period with early stopping
-    on validation, refit on train + validation with the stopped round count,
-    and scored once on the test period.
+    Baseline settings are tuned as in evaluate. Each model's horizon bands are
+    trained on the training period with early stopping on validation, refit on
+    train + validation with the stopped round count, and scored once on the
+    test period. The median model is trained with and without the other lanes'
+    features (gbm and gbm_own) to measure what they add.
 
     Returns:
-        Output of evaluate.score, with chosen rounds and baseline settings in attrs.
+        Output of evaluate.score, with chosen rounds, baseline settings, spike
+        thresholds, alert and interval scores, and per-row results in attrs.
     """
     config = config or EVALUATION_CONFIG
-    lane = load_lane(lane_id)
-    hourly, live = hourly_delay(lane), live_readings(lane)
+    lane, hourly, live = lane_history(lane_id)
+    others = other_lane_inputs(lane_id)
     settings = tune(hourly, live, config)
 
     def span(start, end):
@@ -201,41 +312,78 @@ def evaluate_lane(lane_id: int, config: Optional[Dict] = None) -> pd.DataFrame:
 
     train_h = training_horizons()
     base_train = BaselinePredictor.fit(hourly[config["train_start"]:config["train_end"]], **settings)
-    train = build_features(lane, hourly, live, base_train, span(config["train_start"], config["train_end"]), train_h)
-    valid = build_features(lane, hourly, live, base_train,
-                           span(config["validation_start"], config["validation_end"]), train_h)
-
     base_full = BaselinePredictor.fit(hourly[config["train_start"]:config["validation_end"]], **settings)
-    full = build_features(lane, hourly, live, base_full, span(config["train_start"], config["validation_end"]), train_h)
+    train = build_features(lane, hourly, live, base_train, span(config["train_start"], config["train_end"]),
+                           train_h, others=others)
+    valid = build_features(lane, hourly, live, base_train,
+                           span(config["validation_start"], config["validation_end"]), train_h, others=others)
+    full = build_features(lane, hourly, live, base_full, span(config["train_start"], config["validation_end"]),
+                          train_h, others=others)
     test = build_features(lane, hourly, live, base_full,
-                          span(config["test_start"], config["test_end"]), config["horizons"])
+                          span(config["test_start"], config["test_end"]), config["horizons"], others=others)
 
-    rounds = {}
-    for objective in GBM_CONFIG["objectives"]:
-        boosters, rounds[objective] = fit_bands(train, valid, full, objective)
-        test[f"gbm_{objective}"] = predict_bands(boosters, test)
+    own, cross = feature_columns(train, False), feature_columns(train, True)
+    runs = {"gbm_own": ("median", own), "gbm": ("median", cross), "low": ("low", cross), "high": ("high", cross)}
+    if has_enough_spikes(hourly, config):
+        runs["spike_prob"] = ("spike", cross)
+    rounds, thresholds = {}, None
+    for column, (kind, features) in runs.items():
+        boosters, rounds[column], valid_pred = fit_bands(train, valid, full, kind, features)
+        test[column] = predict_bands(boosters, test)
+        if kind == "spike":
+            thresholds = band_thresholds(valid, valid_pred)
+    test["low"] = np.minimum(test.low, test.gbm)
+    test["high"] = np.maximum(test.high, test.gbm)
 
-    methods = ["baseline", "last_reading"] + [f"gbm_{o}" for o in GBM_CONFIG["objectives"]]
-    scores = score(test, methods, config["spike_minutes"])
-    scores.attrs.update(settings=settings, rounds=rounds, results=test)
+    spike = config["spike_minutes"]
+    rules = {"baseline": test.baseline > spike, "gbm_own": test.gbm_own > spike, "gbm": test.gbm > spike,
+             "high": test.high > spike}
+    if thresholds is not None:
+        test["spike_alert"] = test.spike_prob >= test.h.map(band_of).map(dict(enumerate(thresholds)))
+        rules["classifier"] = test.spike_alert
+
+    scores = score(test, ["baseline", "last_reading", "gbm_own", "gbm"], spike)
+    scores.attrs.update(settings=settings, rounds=rounds, thresholds=thresholds, results=test,
+                        alerts=alert_scores(test, rules, spike), intervals=interval_scores(test))
     return scores
 
 
-def model_paths(lane_id: int) -> List[Path]:
-    """Where each horizon band's LightGBM model for a lane is stored."""
-    return [Path(BASELINE_CONFIG["model_dir"]) / f"gbm_lane{lane_id}_upto{b['up_to']}h.txt"
+def model_paths(lane_id: int, kind: str = "median") -> List[Path]:
+    """Where each horizon band's LightGBM model of a kind for a lane is stored."""
+    return [Path(BASELINE_CONFIG["model_dir"]) / f"gbm_lane{lane_id}_{kind}_upto{b['up_to']}h.txt"
             for b in GBM_CONFIG["bands"]]
 
 
-def load_boosters(lane_id: int) -> Optional[List[lgb.Booster]]:
-    """A lane's saved band models, or None if any is missing."""
-    paths = model_paths(lane_id)
-    if not all(p.exists() for p in paths):
+def meta_path(lane_id: int) -> Path:
+    """Where a lane's spike thresholds are stored."""
+    return Path(BASELINE_CONFIG["model_dir"]) / f"gbm_lane{lane_id}_meta.json"
+
+
+def load_models(lane_id: int) -> Optional[Dict]:
+    """
+    A lane's saved models: {kind: boosters} for every kind with all bands saved,
+    plus "spike_thresholds" when the spike classifier is present. None without
+    the median models.
+    """
+    models = {}
+    for kind in GBM_CONFIG["models"]:
+        paths = model_paths(lane_id, kind)
+        if all(p.exists() for p in paths):
+            models[kind] = [lgb.Booster(model_file=str(p)) for p in paths]
+    if "median" not in models:
         return None
-    return [lgb.Booster(model_file=str(p)) for p in paths]
+    if "spike" in models:
+        models["spike_thresholds"] = json.loads(meta_path(lane_id).read_text())["spike_thresholds"]
+    return models
 
 
-def train_lane(lane_id: int) -> List[lgb.Booster]:
+def other_lanes_needed(models: Dict) -> List[int]:
+    """Lane IDs whose readings a lane's saved models take as features."""
+    names = set().union(*(b.feature_name() for kind in GBM_CONFIG["models"] for b in models.get(kind, [])))
+    return sorted({int(n[len("other"):].split("_")[0]) for n in names if n.startswith("other")})
+
+
+def train_lane(lane_id: int) -> Dict:
     """
     Train and save one lane's LightGBM models and the baseline they build on.
 
@@ -246,32 +394,53 @@ def train_lane(lane_id: int) -> List[lgb.Booster]:
         lane_id: Cascade crossing lane ID.
 
     Returns:
-        The trained boosters, one per horizon band.
+        The trained models, as load_models returns them.
     """
     config, horizons = EVALUATION_CONFIG, training_horizons()
     baseline, settings = train_baseline.train_lane(lane_id)
-    lane = load_lane(lane_id)
-    hourly, live = hourly_delay(lane), live_readings(lane)
+    lane, hourly, live = lane_history(lane_id)
+    others = other_lane_inputs(lane_id)
 
     base_train = BaselinePredictor.fit(hourly[config["train_start"]:config["train_end"]], **settings)
-    train = build_features(lane, hourly, live, base_train, hourly[config["train_start"]:config["train_end"]].index, horizons)
+    train = build_features(lane, hourly, live, base_train, hourly[config["train_start"]:config["train_end"]].index,
+                           horizons, others=others)
     valid = build_features(lane, hourly, live, base_train,
-                           hourly[config["validation_start"]:config["validation_end"]].index, horizons)
-    full = build_features(lane, hourly, live, baseline, hourly[config["train_start"]:].index, horizons)
-    boosters, rounds = fit_bands(train, valid, full, GBM_CONFIG["objective"])
+                           hourly[config["validation_start"]:config["validation_end"]].index, horizons, others=others)
+    full = build_features(lane, hourly, live, baseline, hourly[config["train_start"]:].index, horizons, others=others)
+    features = feature_columns(train, cross_lane=True)
 
-    for booster, path in zip(boosters, model_paths(lane_id)):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        booster.save_model(str(path))
-    print(f"{CASCADE_CONFIG['lanes'][lane_id]} (lane {lane_id}): rounds per band {rounds}")
-    return boosters
+    kinds = [k for k in GBM_CONFIG["models"] if k != "spike" or has_enough_spikes(hourly, config)]
+    models, rounds = {}, {}
+    for kind in kinds:
+        models[kind], rounds[kind], valid_pred = fit_bands(train, valid, full, kind, features)
+        for booster, path in zip(models[kind], model_paths(lane_id, kind)):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            booster.save_model(str(path))
+        if kind == "spike":
+            models["spike_thresholds"] = band_thresholds(valid, valid_pred)
+            meta_path(lane_id).write_text(json.dumps({"spike_thresholds": models["spike_thresholds"]}))
+    if "spike" not in kinds:
+        # A classifier from an earlier training would no longer match: remove it
+        for path in model_paths(lane_id, "spike") + [meta_path(lane_id)]:
+            path.unlink(missing_ok=True)
+    print(f"{CASCADE_CONFIG['lanes'][lane_id]} (lane {lane_id}): rounds per band {rounds}, "
+          f"spike thresholds {models.get('spike_thresholds')}")
+    return models
+
+
+def recent_inputs(recent: pd.DataFrame, until: pd.Timestamp, origin: pd.Timestamp) -> LaneInputs:
+    """Hourly delay and the live reading at origin from a lane's recent readings up to until."""
+    recent = recent[recent.index <= until]
+    live = recent["delay"].iloc[-3:].mean() if len(recent) else np.nan
+    return hourly_delay(recent), pd.Series([live], index=[origin])
 
 
 def forecast(
     recent: pd.DataFrame,
     baseline: BaselinePredictor,
-    boosters: List[lgb.Booster],
+    models: Dict,
     targets: Iterable[datetime],
+    others_recent: Optional[Dict[int, Optional[pd.DataFrame]]] = None,
 ) -> pd.DataFrame:
     """
     Predict the mean delay of each target hour from recent 5-minute readings.
@@ -280,27 +449,43 @@ def forecast(
     boundary at or after the poll following the latest reading. The live reading
     is the mean of the last three polls, as in training, and the hour in
     progress counts as the last complete hour from what has been polled so far.
+    Other lanes are read up to the same poll; a lane missing from others_recent
+    leaves its features empty, which the models treat as missing.
 
     Args:
         recent: Output of cascade.fetch_recent (at least 8 days for the week-ago lags).
         baseline: The lane's fitted baseline.
-        boosters: The lane's trained LightGBM models, one per horizon band.
+        models: The lane's trained models, as load_models returns them.
         targets: Local times; each is predicted for the hour it falls in.
+        others_recent: Recent readings of the lanes in other_lanes_needed(models).
 
     Returns:
-        DataFrame indexed by target hour start with baseline and gbm predictions.
-        Hours before the origin or past the last horizon band are left out.
+        DataFrame indexed by target hour start with baseline, gbm, low and high
+        predictions, plus spike_prob and spike_alert when the lane has a
+        classifier. Hours before the origin or past the last horizon band are left out.
     """
-    origin = (recent.index[-1] + pd.Timedelta(minutes=5)).ceil("H")
+    last = recent.index[-1]
+    origin = (last + pd.Timedelta(minutes=5)).ceil("H")
     hours = pd.DatetimeIndex(sorted({pd.Timestamp(t).floor("H") for t in targets}))
     horizons = [int(h) for h in (hours - origin) / pd.Timedelta(hours=1) if h >= 0 and band_of(int(h)) is not None]
-    out = pd.DataFrame(columns=["baseline", "gbm"])
+    columns = ["baseline", "gbm", "low", "high"] + (["spike_prob", "spike_alert"] if "spike" in models else [])
+    out = pd.DataFrame(columns=columns)
     if horizons:
-        hourly = hourly_delay(recent)
-        live = pd.Series([recent["delay"].iloc[-3:].mean()], index=[origin])
-        f = build_features(recent, hourly, live, baseline, pd.DatetimeIndex([origin]), horizons, require_actual=False)
-        f["gbm"] = predict_bands(boosters, f)
-        out = f.set_index("target")[["baseline", "gbm"]]
+        hourly, live = recent_inputs(recent, last, origin)
+        empty = (pd.Series(dtype=float), pd.Series(dtype=float))
+        others = {lane_id: recent_inputs(df, last, origin) if df is not None and len(df) else empty
+                  for lane_id, df in (others_recent or {}).items()}
+        for lane_id in other_lanes_needed(models):
+            others.setdefault(lane_id, empty)
+        f = build_features(recent, hourly, live, baseline, pd.DatetimeIndex([origin]), horizons,
+                           require_actual=False, others=others)
+        f["gbm"] = predict_bands(models["median"], f)
+        f["low"] = np.minimum(predict_bands(models["low"], f), f.gbm) if "low" in models else np.nan
+        f["high"] = np.maximum(predict_bands(models["high"], f), f.gbm) if "high" in models else np.nan
+        if "spike" in models:
+            f["spike_prob"] = predict_bands(models["spike"], f)
+            f["spike_alert"] = f.spike_prob >= f.h.map(band_of).map(dict(enumerate(models["spike_thresholds"])))
+        out = f.set_index("target")[columns]
     out.attrs["origin"] = origin
     return out
 
@@ -320,8 +505,10 @@ def main() -> None:
         scores = evaluate_lane(lane_id)
         print(f"\n=== {CASCADE_CONFIG['lanes'][lane_id]} (lane {lane_id}) ===", flush=True)
         print("baseline settings:", scores.attrs["settings"])
-        print("rounds:", scores.attrs["rounds"])
-        print(scores.drop(columns="n").unstack("method").round(2).to_string(), flush=True)
+        print("rounds:", scores.attrs["rounds"], "spike thresholds:", scores.attrs["thresholds"])
+        print(scores.drop(columns="n").unstack("method").round(2).to_string())
+        print(scores.attrs["alerts"].drop(columns="spikes").unstack("rule").round(2).to_string())
+        print(scores.attrs["intervals"].round(2).to_string(), flush=True)
 
 
 if __name__ == "__main__":

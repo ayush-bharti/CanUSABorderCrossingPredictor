@@ -31,8 +31,9 @@
         <div class="row" id="now-cards"></div>
         <div id="forecast-chart" class="mt-3" style="height: 360px;"></div>
         <p class="text-muted small mb-0">
-            Predicted mean delay for each hour, from Cascade Gateway sensor readings. Hours marked with a hollow
-            point have no live data behind them and show the typical delay for that time.
+            Predicted mean delay for each hour, from Cascade Gateway sensor readings. The shaded band is the range
+            the delay falls in 8 times out of 10. A warning marks hours at risk of averaging over 30 minutes; most warnings turn out shorter, but most such hours get one. Hollow
+            points have no live data behind them and show the typical delay for that time.
         </p>
     </div>
 </div>
@@ -79,6 +80,17 @@
 const directionEl = document.getElementById('direction');
 const kindEl = document.getElementById('kind');
 const minutes = v => `${Math.round(v)} min`;
+const COLORS = ['#0d6efd', '#fd7e14'];
+const BANDS = ['rgba(13,110,253,0.15)', 'rgba(253,126,20,0.15)'];
+
+function range(h) {
+    return h.low === null ? '' : `<div class="small text-muted">${Math.round(h.low)}–${Math.round(h.high)}</div>`;
+}
+
+function spikeNote(h) {
+    if (h.spike_chance === null) return '';
+    return `${Math.round(h.spike_chance * 100)}% chance over 30 min`;
+}
 
 function selection() {
     return `direction=${directionEl.value}&kind=${kindEl.value}`;
@@ -102,22 +114,40 @@ function loadForecast() {
                     : '<div class="text-muted">No live reading</div>';
                 const badge = best && best === c && data.crossings.length > 1
                     ? '<span class="badge bg-success ms-2">Shorter now</span>' : '';
+                const alerts = c.hours.filter(h => h.spike_alert);
+                const warning = alerts.length
+                    ? `<div class="text-danger small mt-2"><i class="fas fa-exclamation-triangle"></i>
+                       Risk of over 30 min around ${alerts.map(h => h.label.slice(4)).join(', ')}</div>` : '';
                 cards.insertAdjacentHTML('beforeend', `
                     <div class="col-md-6 mb-3">
                         <div class="border rounded p-3 h-100">
-                            <h5>${c.crossing}${badge}</h5>${now}
+                            <h5>${c.crossing}${badge}</h5>${now}${warning}
                         </div>
                     </div>`);
             });
-            const traces = data.crossings.map(c => ({
-                name: c.crossing,
-                x: c.hours.map(h => h.time),
-                y: c.hours.map(h => h.delay),
-                text: c.hours.map(h => h.day_type || ''),
-                mode: 'lines+markers',
-                marker: {symbol: c.hours.map(h => h.source === 'gbm' ? 'circle' : 'circle-open'), size: 8},
-                hovertemplate: '%{x|%a %H:%M}: %{y:.0f} min %{text}<extra>%{fullData.name}</extra>',
-            }));
+            const traces = [];
+            data.crossings.forEach((c, i) => {
+                const banded = c.hours.filter(h => h.low !== null);
+                if (banded.length) {
+                    traces.push({x: banded.map(h => h.time), y: banded.map(h => h.high), mode: 'lines',
+                                 line: {width: 0}, hoverinfo: 'skip', showlegend: false});
+                    traces.push({x: banded.map(h => h.time), y: banded.map(h => h.low), mode: 'lines',
+                                 line: {width: 0}, fill: 'tonexty', fillcolor: BANDS[i], hoverinfo: 'skip',
+                                 showlegend: false});
+                }
+                traces.push({
+                    name: c.crossing,
+                    x: c.hours.map(h => h.time),
+                    y: c.hours.map(h => h.delay),
+                    text: c.hours.map(h => [h.low === null ? '' : `(${Math.round(h.low)}–${Math.round(h.high)})`,
+                                            spikeNote(h), h.day_type || ''].filter(Boolean).join(' · ')),
+                    mode: 'lines+markers',
+                    line: {color: COLORS[i]},
+                    marker: {symbol: c.hours.map(h => h.spike_alert ? 'triangle-up' : h.source === 'gbm' ? 'circle' : 'circle-open'),
+                             size: c.hours.map(h => h.spike_alert ? 12 : 8), color: COLORS[i]},
+                    hovertemplate: '%{x|%a %H:%M}: %{y:.0f} min %{text}<extra>%{fullData.name}</extra>',
+                });
+            });
             Plotly.newPlot('forecast-chart', traces, {
                 margin: {t: 10, r: 10, b: 40, l: 50},
                 yaxis: {title: 'minutes', rangemode: 'tozero'},
@@ -142,11 +172,14 @@ document.getElementById('plan-form').addEventListener('submit', e => {
                 `<tr><th>Crossing</th>${hours.map(h => `<th class="${h.time === data.at ? 'table-primary' : ''}">${h.label}</th>`).join('')}</tr>`;
             document.getElementById('plan-body').innerHTML = data.crossings.map(c =>
                 `<tr><th>${c.crossing}</th>${c.hours.map(h =>
-                    `<td class="${h.time === data.at ? 'table-primary fw-bold' : ''}">${minutes(h.delay)}</td>`).join('')}</tr>`
+                    `<td class="${h.time === data.at ? 'table-primary fw-bold' : ''}" title="${spikeNote(h)}">
+                        ${minutes(h.delay)}${h.spike_alert ? ' <i class="fas fa-exclamation-triangle text-danger"></i>' : ''}
+                        ${range(h)}</td>`).join('')}</tr>`
             ).join('');
             const target = hours.find(h => h.time === data.at) || hours[2];
             const notes = [];
             if (target.day_type) notes.push(`${target.day_type}.`);
+            if (data.crossings.some(c => c.hours.some(h => h.spike_alert))) notes.push('The warning marks hours at risk of averaging over 30 minutes.');
             if (target.source === 'profile') notes.push('Live data does not reach this far ahead, so these are typical delays for that time of year, weekday and hour.');
             document.getElementById('plan-note').textContent = notes.join(' ');
             document.getElementById('plan-results').classList.remove('d-none');

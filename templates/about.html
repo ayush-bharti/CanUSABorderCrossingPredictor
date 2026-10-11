@@ -25,7 +25,16 @@
             <li>
                 <strong>A gradient-boosted model (LightGBM)</strong> that starts from the profile and corrects it using the last
                 few hours of delay and traffic volume, the same hour a day and a week earlier, and how far the day is from a holiday.
-                It covers up to a week ahead; beyond that the page shows the typical delay.
+                It also uses the current delay in the other lanes and at the other crossing. It covers up to a week ahead;
+                beyond that the page shows the typical delay.
+            </li>
+            <li>
+                <strong>A range</strong> from two more LightGBM models, for the 10th and 90th percentile, so the delay
+                falls inside it about 8 times out of 10.
+            </li>
+            <li>
+                <strong>A 30-minute warning</strong> for car lanes, from a model of the chance that an hour averages
+                over 30 minutes.
             </li>
         </ul>
 
@@ -33,8 +42,10 @@
         <p>
             Tested on October 2025 to September 2026, a year the models never saw while being built, for southbound cars at
             Peace Arch the predicted hourly delay was off by 5 minutes on average one hour ahead and about 7 minutes a day or a
-            week ahead. It flagged 70% of hours with a delay over 30 minutes one hour ahead. Northbound and NEXUS delays are
-            usually short and predicted within 1 to 3 minutes, but the rare long northbound waits are mostly missed.
+            week ahead. The 30-minute warning caught 85% of hours over 30 minutes one hour ahead and 78% a day ahead; 64% and
+            46% of warnings were right. Northbound and NEXUS delays are usually short and predicted within 1 to 3 minutes.
+            Long northbound waits are rare and harder: the warning catches about half of them at Peace Arch and under a
+            third at Pacific Highway, and most northbound warnings turn out shorter.
         </p>
         <p class="text-muted mb-0">
             Delays are the time spent queueing as measured by the sensors, which can differ from the wait times CBP and CBSA post.
