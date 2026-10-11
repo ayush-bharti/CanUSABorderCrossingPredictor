@@ -1,7 +1,7 @@
 """
 Entry point for running the Border Crossing Predictor web application.
 """
-from src.border_predictor.app import app
+from border_predictor.app import main
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    main()

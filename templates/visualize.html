@@ -3,91 +3,23 @@
 {% block title %}Visualize - Border Crossing Predictor{% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-md-12">
-        <div class="card mb-4">
-            <div class="card-header bg-primary text-white">
-                <h4><i class="fas fa-chart-bar"></i> Border Crossing Wait Time Patterns</h4>
-            </div>
-            <div class="card-body">
-                {% if error %}
-                <div class="alert alert-warning">
-                    <i class="fas fa-exclamation-triangle"></i> {{ error }}
-                </div>
-                {% else %}
-                <ul class="nav nav-tabs" id="visualizationTabs" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link active" id="hourly-tab" data-bs-toggle="tab" data-bs-target="#hourly" type="button" role="tab" aria-controls="hourly" aria-selected="true">
-                            Hourly Patterns
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="daily-tab" data-bs-toggle="tab" data-bs-target="#daily" type="button" role="tab" aria-controls="daily" aria-selected="false">
-                            Daily Patterns
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="monthly-tab" data-bs-toggle="tab" data-bs-target="#monthly" type="button" role="tab" aria-controls="monthly" aria-selected="false">
-                            Monthly Patterns
-                        </button>
-                    </li>
-                </ul>
-                <div class="tab-content mt-3" id="visualizationTabContent">
-                    <div class="tab-pane fade show active" id="hourly" role="tabpanel" aria-labelledby="hourly-tab">
-                        <div id="hourly-chart" style="height: 500px;"></div>
-                        <div class="mt-3">
-                            <h5>Insights:</h5>
-                            <ul>
-                                <li>Wait times tend to be highest during midday hours.</li>
-                                <li>Early morning and late night typically have the shortest wait times.</li>
-                                <li>Consider crossing during off-peak hours to minimize wait time.</li>
-                            </ul>
-                        </div>
-                    </div>
-                    <div class="tab-pane fade" id="daily" role="tabpanel" aria-labelledby="daily-tab">
-                        <div id="daily-chart" style="height: 500px;"></div>
-                        <div class="mt-3">
-                            <h5>Insights:</h5>
-                            <ul>
-                                <li>Weekends typically have longer wait times than weekdays.</li>
-                                <li>Fridays and Sundays often have the longest wait times.</li>
-                                <li>Consider crossing on a Tuesday or Wednesday for shorter wait times.</li>
-                            </ul>
-                        </div>
-                    </div>
-                    <div class="tab-pane fade" id="monthly" role="tabpanel" aria-labelledby="monthly-tab">
-                        <div id="monthly-chart" style="height: 500px;"></div>
-                        <div class="mt-3">
-                            <h5>Insights:</h5>
-                            <ul>
-                                <li>Summer months (June-August) typically have the longest wait times.</li>
-                                <li>Winter months (November-February) often have shorter wait times.</li>
-                                <li>Holiday seasons can significantly increase wait times.</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-        
-        <div class="card">
-            <div class="card-header bg-primary text-white">
-                <h4><i class="fas fa-info-circle"></i> Understanding the Patterns</h4>
-            </div>
-            <div class="card-body">
-                <p>These visualizations show historical patterns in border crossing wait times at the Blaine Peace Arch crossing between Vancouver and Seattle.</p>
-                <p>Key factors that influence wait times include:</p>
-                <ul>
-                    <li><strong>Time of Day:</strong> Peak travel hours typically result in longer wait times.</li>
-                    <li><strong>Day of Week:</strong> Weekends and holidays generally have higher traffic volume.</li>
-                    <li><strong>Season:</strong> Summer months and holiday seasons experience increased cross-border travel.</li>
-                    <li><strong>Special Events:</strong> Concerts, sports events, and conferences can cause traffic spikes.</li>
-                    <li><strong>Weather Conditions:</strong> Severe weather can impact crossing times.</li>
-                </ul>
-                <p>Our prediction model takes these patterns into account to provide accurate wait time forecasts.</p>
-            </div>
-        </div>
+<div class="card mb-4">
+    <div class="card-header bg-primary text-white">
+        <h4 class="mb-0"><i class="fas fa-chart-bar"></i> Typical delay by day and hour</h4>
+    </div>
+    <div class="card-body">
+        {% if error %}
+        <div class="alert alert-warning"><i class="fas fa-exclamation-triangle"></i> {{ error }}</div>
+        {% else %}
+        <p class="text-muted">
+            Typical (median) delay in minutes on ordinary days since 2023, averaged over the year, from Cascade Gateway
+            sensor data. Holidays and long weekends are excluded here; the predictor adjusts for them separately.
+        </p>
+        <select class="form-select mb-3" id="lane-select">
+            {% for chart in charts %}<option value="{{ loop.index0 }}">{{ chart.title }}</option>{% endfor %}
+        </select>
+        <div id="heatmap" style="height: 420px;"></div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}
@@ -95,29 +27,19 @@
 {% block scripts %}
 {% if not error %}
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Parse JSON data
-        const hourlyData = JSON.parse('{{ hour_json | safe }}');
-        const dailyData = JSON.parse('{{ day_json | safe }}');
-        const monthlyData = JSON.parse('{{ month_json | safe }}');
-        
-        // Create charts
-        Plotly.newPlot('hourly-chart', hourlyData.data, hourlyData.layout);
-        Plotly.newPlot('daily-chart', dailyData.data, dailyData.layout);
-        Plotly.newPlot('monthly-chart', monthlyData.data, monthlyData.layout);
-        
-        // Resize charts when tab is shown
-        const tabs = document.querySelectorAll('button[data-bs-toggle="tab"]');
-        tabs.forEach(tab => {
-            tab.addEventListener('shown.bs.tab', function(event) {
-                const targetId = event.target.getAttribute('data-bs-target').substring(1);
-                const chart = document.getElementById(`${targetId}-chart`);
-                if (chart) {
-                    window.dispatchEvent(new Event('resize'));
-                }
-            });
-        });
-    });
+const charts = {{ charts | tojson }};
+function draw(i) {
+    const c = charts[i];
+    Plotly.newPlot('heatmap', [{
+        type: 'heatmap', z: c.z, x: c.x, y: c.y, colorscale: 'YlOrRd', zmin: 0,
+        hovertemplate: '%{y} %{x}: %{z:.0f} min<extra></extra>', colorbar: {title: 'min'},
+    }], {
+        margin: {t: 10, r: 10, b: 50, l: 50},
+        yaxis: {autorange: 'reversed'},
+    }, {responsive: true, displayModeBar: false});
+}
+document.getElementById('lane-select').addEventListener('change', e => draw(+e.target.value));
+draw(0);
 </script>
 {% endif %}
 {% endblock %}
