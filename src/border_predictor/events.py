@@ -47,8 +47,13 @@ def get_json(url: str, params: Dict, config: Dict) -> Dict:
 
 
 def download_schedule(config: Dict = EVENTS_CONFIG) -> pd.DataFrame:
-    """Download every configured team's games from first_season to next year and save them."""
-    rows = []
+    """
+    Download every configured team's games from first_season to next year and save them.
+
+    Raises:
+        RuntimeError: If any request failed; the saved file is left as it was.
+    """
+    rows, failures = [], 0
     last_season = date.today().year + 1
     for team in config["teams"]:
         url = f"{config['api_url']}/{team['sport']}/teams/{team['team']}/schedule"
@@ -58,14 +63,21 @@ def download_schedule(config: Dict = EVENTS_CONFIG) -> pd.DataFrame:
                 try:
                     rows += parse_events(get_json(url, params, config), team["league"], config["timezone"])
                 except (requests.RequestException, ValueError) as e:
+                    failures += 1
                     logger.warning("%s %s season %s type %s: %s", team["league"], team["team"], season, season_type, e)
     for tournament in config["tournaments"]:
         url = f"{config['api_url']}/{tournament['sport']}/scoreboard"
         day, end = date.fromisoformat(tournament["start"]), date.fromisoformat(tournament["end"])
         while day <= end:
-            data = get_json(url, {"dates": day.strftime("%Y%m%d")}, config)
-            rows += parse_events(data, tournament["league"], config["timezone"])
+            try:
+                data = get_json(url, {"dates": day.strftime("%Y%m%d")}, config)
+                rows += parse_events(data, tournament["league"], config["timezone"])
+            except (requests.RequestException, ValueError) as e:
+                failures += 1
+                logger.warning("%s %s: %s", tournament["league"], day, e)
             day += timedelta(days=1)
+    if failures:
+        raise RuntimeError(f"{failures} schedule requests failed; kept {config['output_path']} unchanged")
     games = pd.DataFrame(rows).drop_duplicates("id").sort_values("start").reset_index(drop=True)
     path = config["output_path"]
     path.parent.mkdir(parents=True, exist_ok=True)
