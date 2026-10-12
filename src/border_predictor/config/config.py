@@ -41,6 +41,44 @@ CASCADE_CONFIG = {
     "request_delay_seconds": 0.5,
 }
 
+# Open-Meteo hourly weather at the crossings (no API key). History comes from the reanalysis archive,
+# which lags a few days; forecasts (with recent past days) come from the forecast API.
+WEATHER_CONFIG = {
+    "archive_url": "https://archive-api.open-meteo.com/v1/archive",
+    "forecast_url": "https://api.open-meteo.com/v1/forecast",
+    "latitude": 49.0,  # between Peace Arch and Pacific Highway
+    "longitude": -122.75,
+    "timezone": "America/Vancouver",
+    "hourly": ["temperature_2m", "precipitation", "snowfall", "snow_depth"],
+    "history_start": "2009-01-01",
+    "output_path": DATA_DIR / "weather" / "hourly.csv",
+    "past_days": 2,
+    "forecast_days": 9,  # covers the longest horizon (168 h) from any hour today
+    "timeout_seconds": 60,
+}
+
+# Pro sports games in Seattle and Vancouver from ESPN's public site API (unofficial, no key): Seahawks and
+# World Cup games at Lumen Field, and the Mariners for Toronto's visits. season_types: 2 regular season,
+# 3 playoffs. Other teams' games (Canucks, Kraken, Sounders, Whitecaps, other Mariners opponents) showed no
+# effect on the test year.
+EVENTS_CONFIG = {
+    "api_url": "https://site.api.espn.com/apis/site/v2/sports",
+    "teams": [
+        {"league": "nfl", "sport": "football/nfl", "team": "sea", "season_types": [2, 3]},
+        {"league": "mlb", "sport": "baseball/mlb", "team": "sea", "season_types": [2, 3]},
+    ],
+    # Tournaments read day by day from the scoreboard, keeping games in Seattle or Vancouver
+    "tournaments": [{"league": "fifa", "sport": "soccer/fifa.world", "start": "2026-06-11", "end": "2026-07-19"}],
+    "first_season": 2008,
+    "timezone": "America/Vancouver",
+    "window_hours": 12,  # a game affects travel from about half a day before its start to half a day after
+    # Games at Lumen Field big enough to show in border traffic (the model's stadium-game feature)
+    "stadium_leagues": ["nfl", "fifa"],
+    "output_path": DATA_DIR / "events" / "games.csv",
+    "timeout_seconds": 30,
+    "request_delay_seconds": 0.2,
+}
+
 # Walk-forward evaluation on Cascade history. Training starts after the COVID border closure.
 EVALUATION_CONFIG = {
     "train_start": "2023-01-01",

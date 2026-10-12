@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 
-from border_predictor import gbm
+from border_predictor import gbm, weather
 from border_predictor.baseline import BaselinePredictor
 from border_predictor.cascade import fetch_current_delay, fetch_recent
 from border_predictor.config.config import BASELINE_CONFIG, CASCADE_CONFIG
@@ -26,7 +26,7 @@ def print_gbm(lane_id: int, predictor: BaselinePredictor, models: Dict, start: d
     print(f"Latest reading: {recent['delay'].iloc[-1]:.0f} min at {recent.index[-1]:%Y-%m-%d %H:%M}")
     others = {other: fetch_recent(other) for other in gbm.other_lanes_needed(models)}
     targets = [start + timedelta(hours=step) for step in range(hours + 1)]
-    result = gbm.forecast(recent, predictor, models, targets, others)
+    result = gbm.forecast(recent, predictor, models, targets, others, weather.fetch_forecast())
     if result.empty:
         raise SystemExit("LightGBM predicts up to 168 hours past the latest reading; use --model baseline")
     print("Mean delay for each hour (LightGBM, 80% range; baseline in brackets; ! = risk of over 30 min)")

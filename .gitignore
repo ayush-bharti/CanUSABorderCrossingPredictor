@@ -50,3 +50,7 @@ output/
 
 # Cascade Gateway data: large, and redistribution terms unknown
 data/cascade/
+
+# Downloaded weather history
+data/weather/
+data/events/
