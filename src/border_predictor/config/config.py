@@ -86,6 +86,15 @@ GBM_CONFIG = {
     "spike_min_positives": 200,
     # Add every other lane's live reading and last-hour delay as features
     "cross_lane": True,
+    # Pre-COVID history added to training rows (flagged pre_covid). A random origin_fraction of its
+    # hours keeps memory in check; its rows' weight is picked per lane from weight_grid by the median
+    # model's validation MAE (0 = no history).
+    "history": {
+        "start": "2009-01-01",
+        "end": "2020-02-29",
+        "origin_fraction": 0.33,
+        "weight_grid": [0.0, 0.25, 1.0],
+    },
     # One model per band of horizons (hours ahead), each with its own early stopping: a single model
     # stopped on all horizons at once under-fits the short range. A band predicts every horizon up to
     # up_to (from the previous band's up_to + 1) and trains on train_on. The long-range band trains on

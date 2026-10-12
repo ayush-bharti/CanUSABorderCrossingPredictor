@@ -84,14 +84,19 @@ and volume, the same hour a day and a week before the target when already known,
 holiday-distance features for the target hour, and the baseline's own prediction. It learns
 corrections to the baseline, chiefly how a building queue keeps building and how long-weekend travel
 days differ from the holidays themselves. The other seven lanes' latest reading and last-hour delay are
-inputs too, since a queue in one lane often spills into another.
+inputs too, since a queue in one lane often spills into another. Holiday inputs include which holiday is
+nearest (US Thanksgiving draws different traffic from Victoria Day), not only how far away it is.
+
+Since 2023 gives only about three examples of each holiday, a random third of the hours from 2009 to
+February 2020 are added to training, flagged as pre-COVID. Their weight (0, 0.25 or 1 against the recent
+rows) is picked per lane by validation error, and stored with the thresholds in `models/gbm_lane<id>_meta.json`.
 
 Each band has four models: the median (the prediction), the 10% and 90% quantiles (a range the delay
 falls in 8 times out of 10), and, for the car lanes with enough history of it, a classifier for the
 chance that the hour averages over 30 minutes. Its alert threshold is picked per band for the best F1
 on the validation year. `train` also refreshes the lane's baseline, then saves
-`models/gbm_lane<id>_<model>_upto<h>h.txt` and the thresholds in `models/gbm_lane<id>_meta.json`
-(gitignored).
+`models/gbm_lane<id>_<model>_upto<h>h.txt` (gitignored). Training a lane takes several minutes with the
+pre-COVID history.
 
 ```bash
 python -m border_predictor.gbm train                     # all lanes; --lanes 4 for one
