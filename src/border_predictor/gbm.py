@@ -3,7 +3,8 @@
 Each row is an origin hour t and a horizon h; the target is the mean delay of
 the hour starting at t + h. Features use only what is known at t: the live
 reading, recent hourly delay and volume, the other lanes' current delay,
-calendar and holiday distance for the target hour, and the baseline's own
+calendar, holiday distance, school breaks, weather and big Seattle games for
+the target hour, and the baseline's own
 prediction, so the models learn corrections to the baseline rather than the
 whole pattern from scratch.
 
@@ -27,7 +28,8 @@ import pandas as pd
 
 from border_predictor.baseline import DAY_TYPES, BaselinePredictor, HolidayCalendar
 from border_predictor.cascade import hourly_delay, load_lane
-from border_predictor import train_baseline
+from border_predictor import events as events_data, train_baseline, weather as weather_data
+from border_predictor.school_breaks import school_breaks
 from border_predictor.config.config import BASELINE_CONFIG, CASCADE_CONFIG, EVALUATION_CONFIG, GBM_CONFIG
 from border_predictor.evaluate import live_readings, score, tune
 
@@ -88,6 +90,8 @@ def build_features(
     horizons: Iterable[int],
     require_actual: bool = True,
     others: Optional[Dict[int, LaneInputs]] = None,
+    weather: Optional[pd.DataFrame] = None,
+    schedule: Optional[pd.DataFrame] = None,
 ) -> pd.DataFrame:
     """
     Feature rows for every origin hour and horizon.
@@ -98,6 +102,10 @@ def build_features(
     Args:
         others: Hourly delay and live readings of other lanes by lane ID; adds
             other<id>_live and other<id>_lag_1h columns.
+        weather: Hourly weather by local hour (weather.load_history or
+            weather.fetch_forecast); target hours it lacks get NaN weather.
+        schedule: Home games (events.load_schedule); without it the event
+            features are missing.
 
     Returns:
         DataFrame with columns origin, h, actual, last_reading, baseline and the features.
@@ -152,6 +160,10 @@ def build_features(
     df["day_type"] = pd.Categorical([calendar.day_type(d) for d in days], categories=DAY_TYPES).codes
     dist = holiday_distances(sorted(set(days)))
     df = df.join(dist, on=days)
+    breaks = pd.DataFrame({d: school_breaks(d) for d in set(days)}, index=["school_bc", "school_wa"]).T
+    df = df.join(breaks, on=days)
+    df = pd.concat([df, weather_data.target_features(weather, df.target),
+                    events_data.target_features(schedule, df.target)], axis=1)
     df["pre_covid"] = (df.target < COVID_START).astype(int)
     df["last_reading"] = df.live
     return df
@@ -161,9 +173,11 @@ FEATURES = [
     "h", "live", "live_anomaly", "lag_1h", "lag_2h", "lag_3h", "vol_1h", "vol_2h", "origin_hour",
     "month", "weekday", "hour", "day_type", "days_from_holiday_ca", "days_from_holiday_us",
     "holiday_ca", "holiday_us", "pre_covid", "lag_target_24h", "lag_target_168h", "expected", "baseline",
+    "school_bc", "school_wa", "wx_temp", "wx_precip", "wx_snowfall", "wx_snow_depth", "wx_precip_day",
+    "wx_snowfall_day", "seattle_stadium_game_hours", "toronto_at_seattle",
 ]
-# Features before holiday names and pre-COVID history were added, for comparison in evaluate_lane
-PREVIOUS_FEATURES = [f for f in FEATURES if f not in ("holiday_ca", "holiday_us", "pre_covid")]
+# Features before school breaks, weather and events were added, for comparison in evaluate_lane
+PREVIOUS_FEATURES = [f for f in FEATURES if not f.startswith(("school_", "wx_", "seattle_", "toronto_"))]
 
 
 def feature_columns(df: pd.DataFrame, cross_lane: bool, base: Optional[List[str]] = None) -> List[str]:
@@ -278,13 +292,16 @@ def history_features(
     baseline: BaselinePredictor,
     horizons: Iterable[int],
     others: Dict[int, LaneInputs],
+    weather: Optional[pd.DataFrame] = None,
+    schedule: Optional[pd.DataFrame] = None,
 ) -> pd.DataFrame:
     """Feature rows for a random share of pre-COVID origin hours (GBM_CONFIG["history"])."""
     cfg = GBM_CONFIG["history"]
     origins = hourly[cfg["start"]:cfg["end"]].index
     rng = np.random.default_rng(GBM_CONFIG["params"]["seed"])
     origins = origins[rng.random(len(origins)) < cfg["origin_fraction"]]
-    return build_features(lane, hourly, live, baseline, origins, horizons, others=others)
+    return build_features(lane, hourly, live, baseline, origins, horizons, others=others, weather=weather,
+                          schedule=schedule)
 
 
 def with_history(rows: pd.DataFrame, history: Optional[pd.DataFrame], weight: float) -> pd.DataFrame:
@@ -308,6 +325,23 @@ def select_history_weight(
     for weight in GBM_CONFIG["history"]["weight_grid"]:
         _, _, pred = fit_bands(with_history(train, history, weight), valid, None, "median", features)
         scores[weight] = float(np.mean(np.abs(pred - valid.actual.values)))
+    return min(scores, key=scores.get), scores
+
+
+def select_features(
+    train: pd.DataFrame, valid: pd.DataFrame, candidates: Dict[str, List[str]]
+) -> Tuple[str, Dict[str, float]]:
+    """
+    The feature set in candidates whose early-stopped median models have the
+    lowest validation MAE.
+
+    Returns:
+        The chosen set's name and the validation MAE for each set tried.
+    """
+    scores = {}
+    for name, features in candidates.items():
+        _, _, pred = fit_bands(train, valid, None, "median", features)
+        scores[name] = float(np.mean(np.abs(pred - valid.actual.values)))
     return min(scores, key=scores.get), scores
 
 
@@ -357,19 +391,20 @@ def evaluate_lane(lane_id: int, config: Optional[Dict] = None) -> pd.DataFrame:
     Baseline settings are tuned as in evaluate. Each model's horizon bands are
     trained on the training period (plus weighted pre-COVID history) with early
     stopping on validation, refit on train + validation (plus history) with the
-    stopped round count, and scored once on the test period. Median models are
-    trained without holiday names or history (gbm_prev), with names (gbm_w0),
-    and with names and each history weight (gbm_w<weight>); gbm is the one the
-    validation period picks. The spike classifier is trained with no history
-    (spike_w0) and with the picked weight.
+    stopped round count, and scored once on the test period. The history weight
+    is picked on validation as in train_lane. Median and spike models are
+    trained without school breaks, weather and events (gbm_prev, spike_prev)
+    and with them (gbm_ext, spike_ext); gbm and spike_prob are the pair whose
+    median model has the lower validation MAE, as train_lane picks.
 
     Returns:
         Output of evaluate.score, with chosen rounds, baseline settings, history
-        weights, spike thresholds, alert scores and per-row results in attrs.
+        weight, spike thresholds, alert scores and per-row results in attrs.
     """
     config = config or EVALUATION_CONFIG
     lane, hourly, live = lane_history(lane_id)
     others = other_lane_inputs(lane_id)
+    weather, schedule = weather_data.load_history(), events_data.load_schedule()
     settings = tune(hourly, live, config)
 
     def span(start, end):
@@ -380,45 +415,46 @@ def evaluate_lane(lane_id: int, config: Optional[Dict] = None) -> pd.DataFrame:
     base_full = BaselinePredictor.fit(hourly[config["train_start"]:config["validation_end"]], **settings)
 
     def rows(baseline, origins, horizons=train_h):
-        return build_features(lane, hourly, live, baseline, origins, horizons, others=others)
+        return build_features(lane, hourly, live, baseline, origins, horizons, others=others, weather=weather,
+                              schedule=schedule)
 
     train = rows(base_train, span(config["train_start"], config["train_end"]))
     valid = rows(base_train, span(config["validation_start"], config["validation_end"]))
     full = rows(base_full, span(config["train_start"], config["validation_end"]))
     test = rows(base_full, span(config["test_start"], config["test_end"]), config["horizons"])
-    history_train = history_features(lane, hourly, live, base_train, train_h, others)
-    history_full = history_features(lane, hourly, live, base_full, train_h, others)
+    history_train = history_features(lane, hourly, live, base_train, train_h, others, weather, schedule)
+    history_full = history_features(lane, hourly, live, base_full, train_h, others, weather, schedule)
 
     features = feature_columns(train, True)
     weight, valid_mae = select_history_weight(train, valid, history_train, features)
-    runs = {"gbm_prev": ("median", feature_columns(train, True, PREVIOUS_FEATURES), 0.0)}
-    runs.update({f"gbm_w{w}": ("median", features, w) for w in GBM_CONFIG["history"]["weight_grid"]})
+    previous = feature_columns(train, True, PREVIOUS_FEATURES)
+    runs = {"gbm_prev": ("median", previous), "gbm_ext": ("median", features)}
     if has_enough_spikes(hourly, config):
-        runs["spike_w0"] = ("spike", features, 0.0)
-        if weight:
-            runs["spike_prob"] = ("spike", features, weight)
-    rounds, thresholds = {}, {}
-    for column, (kind, cols, w) in runs.items():
+        runs.update(spike_prev=("spike", previous), spike_ext=("spike", features))
+    rounds, thresholds, feature_mae = {}, {}, {}
+    for column, (kind, cols) in runs.items():
         boosters, rounds[column], valid_pred = fit_bands(
-            with_history(train, history_train, w), valid, with_history(full, history_full, w), kind, cols)
+            with_history(train, history_train, weight), valid, with_history(full, history_full, weight), kind, cols)
         test[column] = predict_bands(boosters, test)
         if kind == "spike":
             thresholds[column] = band_thresholds(valid, valid_pred)
-    test["gbm"] = test[f"gbm_w{weight}"]
-    if "spike_w0" in test and "spike_prob" not in test:
-        test["spike_prob"], thresholds["spike_prob"] = test.spike_w0, thresholds["spike_w0"]
+        else:
+            feature_mae[column.split("_")[1]] = float(np.mean(np.abs(valid_pred - valid.actual.values)))
+    chosen = min(feature_mae, key=feature_mae.get)
+    test["gbm"] = test[f"gbm_{chosen}"]
+    if f"spike_{chosen}" in test:
+        test["spike_prob"], thresholds["spike_prob"] = test[f"spike_{chosen}"], thresholds[f"spike_{chosen}"]
 
     spike = config["spike_minutes"]
     rules = {"baseline": test.baseline > spike, "gbm_prev": test.gbm_prev > spike, "gbm": test.gbm > spike}
     band = test.h.map(band_of)
-    for column in ("spike_w0", "spike_prob"):
-        if column in thresholds:
-            rules[column] = test[column] >= band.map(dict(enumerate(thresholds[column])))
+    for column in thresholds:
+        rules[column] = test[column] >= band.map(dict(enumerate(thresholds[column])))
 
-    methods = ["baseline", "last_reading", "gbm_prev"] + [f"gbm_w{w}" for w in GBM_CONFIG["history"]["weight_grid"]]
-    scores = score(test, methods, spike)
+    scores = score(test, ["baseline", "last_reading", "gbm_prev", "gbm_ext", "gbm"], spike)
     scores.attrs.update(settings=settings, rounds=rounds, thresholds=thresholds, results=test, weight=weight,
-                        valid_mae=valid_mae, alerts=alert_scores(test, rules, spike))
+                        valid_mae=valid_mae, feature_set=chosen, feature_mae=feature_mae,
+                        alerts=alert_scores(test, rules, spike))
     return scores
 
 
@@ -463,7 +499,8 @@ def train_lane(lane_id: int) -> Dict:
     """
     Train and save one lane's LightGBM models and the baseline they build on.
 
-    The history weight is picked on the validation period, round counts are
+    The history weight, then whether to use the school break, weather and
+    event features, are picked on the validation period, round counts are
     found by early stopping on it, and the saved models are then refit with
     those counts on all data since training start plus weighted history.
 
@@ -477,19 +514,28 @@ def train_lane(lane_id: int) -> Dict:
     baseline, settings = train_baseline.train_lane(lane_id)
     lane, hourly, live = lane_history(lane_id)
     others = other_lane_inputs(lane_id)
+    weather, schedule = weather_data.load_history(), events_data.load_schedule()
+    if weather is None or schedule is None:
+        raise SystemExit("Download weather and game history first: python -m border_predictor.weather "
+                         "and python -m border_predictor.events")
 
     def rows(model, origins):
-        return build_features(lane, hourly, live, model, origins, horizons, others=others)
+        return build_features(lane, hourly, live, model, origins, horizons, others=others, weather=weather,
+                              schedule=schedule)
 
     base_train = BaselinePredictor.fit(hourly[config["train_start"]:config["train_end"]], **settings)
     train = rows(base_train, hourly[config["train_start"]:config["train_end"]].index)
     valid = rows(base_train, hourly[config["validation_start"]:config["validation_end"]].index)
     full = rows(baseline, hourly[config["train_start"]:].index)
     features = feature_columns(train, cross_lane=True)
-    history_train = history_features(lane, hourly, live, base_train, horizons, others)
+    history_train = history_features(lane, hourly, live, base_train, horizons, others, weather, schedule)
     weight, valid_mae = select_history_weight(train, valid, history_train, features)
-    history_full = history_features(lane, hourly, live, baseline, horizons, others) if weight else None
+    history_full = (history_features(lane, hourly, live, baseline, horizons, others, weather, schedule)
+                    if weight else None)
     train, full = with_history(train, history_train, weight), with_history(full, history_full, weight)
+    feature_set, feature_mae = select_features(train, valid, {
+        "ext": features, "prev": feature_columns(train, True, PREVIOUS_FEATURES)})
+    features = feature_columns(train, True, FEATURES if feature_set == "ext" else PREVIOUS_FEATURES)
 
     kinds = [k for k in GBM_CONFIG["models"] if k != "spike" or has_enough_spikes(hourly, config)]
     models, rounds, thresholds = {}, {}, None
@@ -504,9 +550,11 @@ def train_lane(lane_id: int) -> Dict:
         # A classifier from an earlier training would no longer match: remove it
         for path in model_paths(lane_id, "spike"):
             path.unlink(missing_ok=True)
-    meta_path(lane_id).write_text(json.dumps({"history_weight": weight, "spike_thresholds": thresholds}))
+    meta_path(lane_id).write_text(json.dumps({"history_weight": weight, "feature_set": feature_set,
+                                              "spike_thresholds": thresholds}))
     print(f"{CASCADE_CONFIG['lanes'][lane_id]} (lane {lane_id}): history weight {weight} "
-          f"(validation MAE {valid_mae}), rounds per band {rounds}, spike thresholds {thresholds}", flush=True)
+          f"(validation MAE {valid_mae}), feature set {feature_set} (validation MAE {feature_mae}), "
+          f"rounds per band {rounds}, spike thresholds {thresholds}", flush=True)
     return models
 
 
@@ -523,6 +571,7 @@ def forecast(
     models: Dict,
     targets: Iterable[datetime],
     others_recent: Optional[Dict[int, Optional[pd.DataFrame]]] = None,
+    weather: Optional[pd.DataFrame] = None,
 ) -> pd.DataFrame:
     """
     Predict the mean delay of each target hour from recent 5-minute readings.
@@ -540,6 +589,9 @@ def forecast(
         models: The lane's trained models, as load_models returns them.
         targets: Local times; each is predicted for the hour it falls in.
         others_recent: Recent readings of the lanes in other_lanes_needed(models).
+        weather: Weather forecast by local hour (weather.fetch_forecast); without
+            it the weather features are missing, which the models allow for.
+            Games come from the saved schedule (events.load_schedule).
 
     Returns:
         DataFrame indexed by target hour start with baseline, gbm, low and high
@@ -560,7 +612,8 @@ def forecast(
         for lane_id in other_lanes_needed(models):
             others.setdefault(lane_id, empty)
         f = build_features(recent, hourly, live, baseline, pd.DatetimeIndex([origin]), horizons,
-                           require_actual=False, others=others)
+                           require_actual=False, others=others, weather=weather,
+                           schedule=events_data.load_schedule())
         f["gbm"] = predict_bands(models["median"], f)
         f["low"] = np.minimum(predict_bands(models["low"], f), f.gbm) if "low" in models else np.nan
         f["high"] = np.maximum(predict_bands(models["high"], f), f.gbm) if "high" in models else np.nan
@@ -588,6 +641,7 @@ def main() -> None:
         print(f"\n=== {CASCADE_CONFIG['lanes'][lane_id]} (lane {lane_id}) ===", flush=True)
         print("baseline settings:", scores.attrs["settings"])
         print("history weight:", scores.attrs["weight"], "validation MAE:", scores.attrs["valid_mae"])
+        print("feature set:", scores.attrs["feature_set"], "validation MAE:", scores.attrs["feature_mae"])
         print("rounds:", scores.attrs["rounds"], "spike thresholds:", scores.attrs["thresholds"])
         print(scores.drop(columns="n").unstack("method").round(2).to_string())
         print(scores.attrs["alerts"].drop(columns="spikes").unstack("rule").round(2).to_string(), flush=True)

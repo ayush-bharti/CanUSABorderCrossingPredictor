@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
-from border_predictor import gbm
+from border_predictor import gbm, weather
 from border_predictor.baseline import BaselinePredictor
 from border_predictor.cascade import fetch_recent
 from border_predictor.config.config import BASELINE_CONFIG, CASCADE_CONFIG
@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 # Cascade polls every 5 minutes; refetching more often than that gains nothing
 RECENT_TTL_SECONDS = 300
+# Open-Meteo updates its forecast hourly
+WEATHER_TTL_SECONDS = 3600
 
 
 @dataclass(frozen=True)
@@ -51,9 +53,12 @@ def local_now() -> datetime:
 class Forecaster:
     """Serves hourly forecasts per lane: LightGBM from recent readings, the baseline beyond its range."""
 
-    def __init__(self, fetch=fetch_recent, ttl_seconds: float = RECENT_TTL_SECONDS):
+    def __init__(self, fetch=fetch_recent, ttl_seconds: float = RECENT_TTL_SECONDS,
+                 fetch_weather=weather.fetch_forecast):
         self._fetch = fetch
         self._ttl = ttl_seconds
+        self._fetch_weather = fetch_weather
+        self._weather: Optional[tuple] = None
         self._models: Dict[int, tuple] = {}
         self._recent: Dict[int, tuple] = {}
         self._lock = threading.Lock()
@@ -82,6 +87,20 @@ class Forecaster:
             self._recent[lane_id] = (time.monotonic(), data)
         return data
 
+    def weather(self) -> Optional[pd.DataFrame]:
+        """Weather forecast, cached; None if Open-Meteo cannot be reached."""
+        with self._lock:
+            if self._weather and time.monotonic() - self._weather[0] < WEATHER_TTL_SECONDS:
+                return self._weather[1]
+        try:
+            data = self._fetch_weather()
+        except Exception as e:  # forecasts still work without weather, which the models treat as missing
+            logger.warning("Weather fetch failed: %s", e)
+            data = None
+        with self._lock:
+            self._weather = (time.monotonic(), data)
+        return data
+
     def forecast(self, lane_id: int, targets: List[datetime]) -> Dict:
         """
         Predicted mean delay for the hour each target falls in.
@@ -104,7 +123,7 @@ class Forecaster:
                 others = gbm.other_lanes_needed(models)
                 with ThreadPoolExecutor(max_workers=8) as pool:
                     others_recent = dict(zip(others, pool.map(self.recent, others)))
-                predicted = gbm.forecast(recent, baseline, models, hours, others_recent)
+                predicted = gbm.forecast(recent, baseline, models, hours, others_recent, self.weather())
 
         def value(row, column):
             return float(row[column]) if column in row and pd.notna(row[column]) else None

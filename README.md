@@ -19,6 +19,9 @@ directions, for cars and NEXUS, from now up to a week ahead.
 │   ├── baseline.py        # Typical-delay profile with holiday and live adjustments
 │   ├── train_baseline.py  # Tune and save the baseline per lane
 │   ├── gbm.py             # LightGBM features, training, evaluation and forecasts
+│   ├── weather.py         # Open-Meteo weather history and forecasts
+│   ├── events.py          # Seattle and Vancouver pro sports schedules
+│   ├── school_breaks.py   # Approximate BC and WA school breaks
 │   ├── evaluate.py        # Hour-by-hour backtest
 │   ├── predict.py         # Command-line predictions
 │   ├── service.py         # Model loading and cached live data for the web app
@@ -27,7 +30,7 @@ directions, for cars and NEXUS, from now up to a week ahead.
 │   └── config/            # Configuration
 ├── tests/
 ├── static/, templates/    # Web interface
-└── data/                  # CBP monthly tables; Cascade downloads and collected data (gitignored)
+└── data/                  # CBP monthly tables; Cascade, weather and schedule downloads (gitignored)
 ```
 
 ## Installation
@@ -86,6 +89,30 @@ corrections to the baseline, chiefly how a building queue keeps building and how
 days differ from the holidays themselves. The other seven lanes' latest reading and last-hour delay are
 inputs too, since a queue in one lane often spills into another. Holiday inputs include which holiday is
 nearest (US Thanksgiving draws different traffic from Victoria Day), not only how far away it is.
+
+Outside events are inputs too:
+
+- Whether BC or WA schools are on a break that day. The breaks come from rules that match recent
+  Surrey/Vancouver and Seattle/Bellingham calendars to within a few days: BC's two-week spring break
+  from the third Monday of March, WA's mid-winter break in Presidents' Day week and spring break in early
+  April, summer and the December holidays.
+- The weather for the target hour and day's precipitation and snowfall, from Open-Meteo. Training uses
+  the observed weather; live predictions use the forecast.
+- Big games in Seattle: the signed hours from the nearest Seahawks or World Cup game at Lumen Field
+  within 12 hours, and whether Toronto is playing the Mariners there that day (those series draw
+  large Canadian crowds). Other teams' games (Mariners against anyone else, Kraken, Sounders, Canucks,
+  Whitecaps) are too frequent to tell apart from an ordinary day and showed no effect.
+
+These help southbound (most on rainy days) but not northbound, so each lane uses them only if they lower
+its validation error; the choice is stored as `feature_set` in the lane's meta file.
+
+Download the weather and game history before training, and refresh the schedules now and then so new
+games are known:
+
+```bash
+python -m border_predictor.weather                       # Open-Meteo archive since 2009
+python -m border_predictor.events                        # Seahawks, Mariners, World Cup since 2008
+```
 
 Since 2023 gives only about three examples of each holiday, a random third of the hours from 2009 to
 February 2020 are added to training, flagged as pre-COVID. Their weight (0, 0.25 or 1 against the recent
@@ -159,6 +186,8 @@ weekday and hour. It needs trained models (`python -m border_predictor.gbm train
 - [Cascade Gateway Border Data Warehouse](https://www.cascadegatewaydata.com/) (Whatcom Council of Governments)
 - [CBP Border Wait Times](https://bwt.cbp.gov/) posted wait times
 - Canadian (BC) and US (WA) holiday calendars from the `holidays` package
+- [Open-Meteo](https://open-meteo.com/) historical weather and forecasts (CC BY 4.0)
+- Sports schedules from ESPN's public site API (unofficial, may change without notice)
 
 ## License
 
