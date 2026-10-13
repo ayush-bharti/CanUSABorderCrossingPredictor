@@ -11,6 +11,7 @@ import argparse
 import logging
 import time
 from datetime import date, timedelta
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -85,13 +86,19 @@ def download_schedule(config: Dict = EVENTS_CONFIG) -> pd.DataFrame:
     return games
 
 
-@lru_cache(maxsize=None)
 def load_schedule(path: Optional[str] = None) -> Optional[pd.DataFrame]:
-    """Saved games, or None when they have not been downloaded."""
+    """Saved games, or None when they have not been downloaded. Re-read when the file changes."""
+    path = Path(path or EVENTS_CONFIG["output_path"])
     try:
-        return pd.read_csv(path or EVENTS_CONFIG["output_path"], parse_dates=["start"])
+        return read_schedule(str(path), path.stat().st_mtime)
     except FileNotFoundError:
         return None
+
+
+@lru_cache(maxsize=2)
+def read_schedule(path: str, mtime: float) -> pd.DataFrame:
+    """The games in a saved schedule; mtime only keys the cache."""
+    return pd.read_csv(path, parse_dates=["start"])
 
 
 def nearest_game(starts: np.ndarray, targets: np.ndarray, window_hours: float) -> np.ndarray:

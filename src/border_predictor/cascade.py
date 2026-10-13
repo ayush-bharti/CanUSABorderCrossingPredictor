@@ -105,18 +105,23 @@ def fetch_recent(lane_id: int, days: int = 9, config: Optional[Dict] = None) -> 
     config = config or CASCADE_CONFIG
     key = load_api_key()
     today = datetime.now(ZoneInfo(config["timezone"])).date()
-    df = parse_csv(fetch_range(lane_id, today - timedelta(days=days - 1), today, key, config))
+    return through_last_reading(parse_csv(fetch_range(lane_id, today - timedelta(days=days - 1), today, key, config)))
+
+
+def through_last_reading(df: pd.DataFrame) -> pd.DataFrame:
+    """Readings up to the last poll with a delay, dropping polls not yet taken or taken while the lane was closed."""
     last = df["avail"].gt(0) & df["delay"].notna()
     return df[: df.index[last][-1]] if last.any() else df.iloc[:0]
 
 
-def load_lane(lane_id: int, config: Optional[Dict] = None) -> pd.DataFrame:
+def load_lane(lane_id: int, config: Optional[Dict] = None, last_months: Optional[int] = None) -> pd.DataFrame:
     """
     Load every downloaded month for a lane.
 
     Args:
         lane_id: Cascade crossing lane ID.
         config: Cascade configuration. Defaults to CASCADE_CONFIG.
+        last_months: Load only this many of the latest downloaded months.
 
     Returns:
         DataFrame indexed by local timestamp with delay, vol and avail columns.
@@ -128,7 +133,7 @@ def load_lane(lane_id: int, config: Optional[Dict] = None) -> pd.DataFrame:
     paths = sorted((Path(config["output_dir"]) / str(lane_id)).glob("*.csv"))
     if not paths:
         raise FileNotFoundError(f"No Cascade data for lane {lane_id}; run python -m border_predictor.cascade")
-    return pd.concat(parse_csv(p) for p in paths).sort_index()
+    return pd.concat(parse_csv(p) for p in paths[-last_months if last_months else 0:]).sort_index()
 
 
 def hourly_delay(lane: pd.DataFrame) -> pd.Series:
@@ -218,6 +223,11 @@ def download(start: date, end: date, config: Optional[Dict] = None) -> None:
         print(f"{lane_name} (lane {lane_id}): fetched {fetched} new months")
 
 
+def last_full_month(today: date) -> date:
+    """First day of the month before today's."""
+    return (today.replace(day=1) - timedelta(days=1)).replace(day=1)
+
+
 def main() -> None:
     """Command line entry point."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -226,11 +236,7 @@ def main() -> None:
     args = parser.parse_args()
 
     start = date.fromisoformat(f"{args.start}-01")
-    if args.end:
-        end = date.fromisoformat(f"{args.end}-01")
-    else:
-        today = date.today()
-        end = date(today.year - (today.month == 1), (today.month - 2) % 12 + 1, 1)
+    end = date.fromisoformat(f"{args.end}-01") if args.end else last_full_month(date.today())
     download(start, end)
 
 

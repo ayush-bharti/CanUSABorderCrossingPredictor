@@ -50,12 +50,20 @@ def local_now() -> datetime:
     return datetime.now(ZoneInfo(BASELINE_CONFIG["timezone"])).replace(tzinfo=None)
 
 
+def model_version(lane_id: int) -> Optional[str]:
+    """When a lane's models were last saved (local time, to the second), from their newest file."""
+    paths = [model_path(lane_id), gbm.meta_path(lane_id)]
+    times = [p.stat().st_mtime for p in paths if p.exists()]
+    return datetime.fromtimestamp(max(times)).strftime("%Y-%m-%d %H:%M:%S") if times else None
+
+
 class Forecaster:
     """Serves hourly forecasts per lane: LightGBM from recent readings, the baseline beyond its range."""
 
     def __init__(self, fetch=fetch_recent, ttl_seconds: float = RECENT_TTL_SECONDS,
-                 fetch_weather=weather.fetch_forecast):
+                 fetch_weather=weather.fetch_forecast, model_version=model_version):
         self._fetch = fetch
+        self._model_version = model_version
         self._ttl = ttl_seconds
         self._fetch_weather = fetch_weather
         self._weather: Optional[tuple] = None
@@ -64,13 +72,18 @@ class Forecaster:
         self._lock = threading.Lock()
 
     def models(self, lane_id: int):
-        """(baseline, LightGBM models as gbm.load_models returns them) for a lane; None if not trained."""
-        if lane_id not in self._models:
+        """
+        (baseline, LightGBM models as gbm.load_models returns them) for a lane; None if not trained.
+        Reloaded when a retrain replaces the saved files, so the app needs no restart.
+        """
+        version = self._model_version(lane_id)
+        cached = self._models.get(lane_id)
+        if cached is None or cached[2] != version:
             path = model_path(lane_id)
             if not path.exists():
                 raise FileNotFoundError(f"No baseline for lane {lane_id}; run python -m border_predictor.gbm train")
-            self._models[lane_id] = (BaselinePredictor.load(path), gbm.load_models(lane_id))
-        return self._models[lane_id]
+            self._models[lane_id] = (BaselinePredictor.load(path), gbm.load_models(lane_id), version)
+        return self._models[lane_id][:2]
 
     def recent(self, lane_id: int) -> Optional[pd.DataFrame]:
         """Recent 5-minute readings, cached; None if Cascade cannot be reached."""

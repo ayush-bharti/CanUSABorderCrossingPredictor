@@ -24,11 +24,14 @@ directions, for cars and NEXUS, from now up to a week ahead.
 │   ├── school_breaks.py   # Approximate BC and WA school breaks
 │   ├── evaluate.py        # Hour-by-hour backtest
 │   ├── predict.py         # Command-line predictions
+│   ├── refresh.py         # Scheduled data download, retrain and checked model swap
+│   ├── tracking.py        # Live forecast log, scored against what happened
 │   ├── service.py         # Model loading and cached live data for the web app
 │   ├── app.py             # Flask web app and JSON API
 │   ├── collector.py       # CBP posted wait-time recorder
 │   └── config/            # Configuration
 ├── tests/
+├── deploy/                # launchd jobs for the hourly tracking snapshot and monthly refresh
 ├── static/, templates/    # Web interface
 └── data/                  # CBP monthly tables; Cascade, weather and schedule downloads (gitignored)
 ```
@@ -156,6 +159,44 @@ in `EVALUATION_CONFIG`. `gbm evaluate` scores LightGBM on the same rows.
 python -m border_predictor.evaluate --lanes 4
 ```
 
+### Scheduled Refresh
+
+`border_predictor.refresh` keeps the models current. It downloads the Cascade months completed since
+the last run, the weather history and the game schedules, then trains every lane in four parallel
+processes (about 35 minutes, 4 GB) into `models/candidate/`. A lane's new models replace its live ones
+only if their validation MAE is within 2% of the live models' and they forecast finite delays from the
+latest readings; otherwise the lane keeps its live models and the run exits with an error. Replaced
+models move to `models/previous/`, and `rollback` swaps them back. The validation year is fixed, so this
+check catches a broken retrain; live tracking (below) shows how the models do on new hours. The web app
+reloads a lane's models when their files change, so it needs no restart.
+
+```bash
+python -m border_predictor.refresh                       # download, retrain, swap in passing lanes
+python -m border_predictor.refresh --dry-run             # train and check only; models stay in models/candidate/
+python -m border_predictor.refresh --skip-download       # retrain on the data already on disk
+python -m border_predictor.refresh rollback              # swap back the models the last refresh replaced
+```
+
+### Live Accuracy Tracking
+
+`border_predictor.tracking snapshot` logs each lane's current forecast for 0, 1, 2, 3, 6, 12, 24, 72 and
+168 hours ahead to `data/tracking/forecasts/YYYY-MM.csv`, and records the mean delay of every hour
+completed in the last nine days to `data/tracking/actuals.csv` (both gitignored). A lane whose latest
+reading is over 90 minutes old, such as a NEXUS lane while closed, is skipped. `report` scores the logged
+forecasts by lane and horizon: mean absolute error next to the baseline's, the share of actual delays
+inside the 80% range, and spike alerts against hours over 30 minutes. The web app's accuracy page shows
+the same for the last 7, 30 or 90 days, with daily error over time.
+
+```bash
+python -m border_predictor.tracking snapshot
+python -m border_predictor.tracking report               # last 7 and 30 days; --days 90 for another window
+```
+
+`deploy/install_launchd.sh` installs both as launchd jobs for the current user: the snapshot every hour
+(7 minutes past) and the refresh at 03:30 on the 2nd of each month. Logs go to
+`~/Library/Logs/border-predictor/`. launchd runs a job missed while the Mac slept when it wakes, but not
+one missed while it was shut down. `deploy/install_launchd.sh uninstall` removes them.
+
 ### CBP Collector
 
 `border_predictor.collector` records the wait times CBP posts for Peace Arch, Pacific Highway, Lynden
@@ -177,7 +218,8 @@ python run.py                                            # http://127.0.0.1:5000
 The home page compares both crossings for a chosen direction and lane type: the latest reading, the
 next 12 hours, and any hour in the next two weeks. Hours beyond LightGBM's week, or when Cascade cannot
 be reached, show the typical delay instead. The visualize page shows each lane's typical delay by
-weekday and hour. It needs trained models (`python -m border_predictor.gbm train`) and
+weekday and hour, and the accuracy page how the logged live forecasts compared with what happened.
+It needs trained models (`python -m border_predictor.gbm train`) and
 `CASCADE_API_KEY`. JSON is at `/api/forecast?direction=south&kind=cars&hours=12` and
 `/api/plan?direction=north&kind=nexus&at=2026-12-24%2015:00`.
 
