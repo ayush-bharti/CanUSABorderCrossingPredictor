@@ -25,8 +25,8 @@ def flat_baseline():
 
 
 def make_forecaster(baseline, fetch):
-    forecaster = service.Forecaster(fetch=fetch, fetch_weather=lambda: None)
-    forecaster._models = {lane.lane_id: (baseline, None) for lane in service.lanes()}
+    forecaster = service.Forecaster(fetch=fetch, fetch_weather=lambda: None, model_version=lambda lane_id: None)
+    forecaster._models = {lane.lane_id: (baseline, None, None) for lane in service.lanes()}
     return forecaster
 
 
@@ -96,8 +96,8 @@ def test_forecast_with_models_fetches_other_lanes(flat_baseline):
         fetched.append(lane_id)
         return data
 
-    forecaster = service.Forecaster(fetch=fetch, fetch_weather=lambda: None)
-    forecaster._models = {4: (flat_baseline, models)}
+    forecaster = service.Forecaster(fetch=fetch, fetch_weather=lambda: None, model_version=lambda lane_id: None)
+    forecaster._models = {4: (flat_baseline, models, None)}
     hours = forecaster.forecast(4, [datetime(2026, 10, 21, 12)])["hours"]
     assert sorted(fetched) == [4, 5]
     assert hours[0]["source"] == "gbm"

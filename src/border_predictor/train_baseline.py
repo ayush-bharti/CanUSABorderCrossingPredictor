@@ -3,7 +3,7 @@
 Settings are chosen on the validation period (see evaluate.tune), then the
 model is refit on all data from the start of training to the latest download.
 """
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 import argparse
 from pathlib import Path
 
@@ -13,9 +13,9 @@ from border_predictor.config.config import BASELINE_CONFIG, CASCADE_CONFIG, EVAL
 from border_predictor.evaluate import live_readings, tune
 
 
-def model_path(lane_id: int) -> Path:
-    """Where the fitted model for a lane is stored."""
-    return Path(BASELINE_CONFIG["model_dir"]) / f"baseline_lane{lane_id}.json"
+def model_path(lane_id: int, model_dir: Optional[Path] = None) -> Path:
+    """Where the fitted model for a lane is stored (default: the configured directory)."""
+    return Path(model_dir or BASELINE_CONFIG["model_dir"]) / f"baseline_lane{lane_id}.json"
 
 
 def train_lane(lane_id: int) -> Tuple[BaselinePredictor, Dict]:

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Hourly: log every lane's forecast and record the hours completed since (tracking.py). Installed by install_launchd.sh. -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.borderpredictor.track</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>__PYTHON__</string>
+        <string>-m</string>
+        <string>border_predictor.tracking</string>
+        <string>snapshot</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>__REPO__</string>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Minute</key>
+        <integer>7</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>__LOGS__/track.log</string>
+    <key>StandardErrorPath</key>
+    <string>__LOGS__/track.log</string>
+</dict>
+</plist>
