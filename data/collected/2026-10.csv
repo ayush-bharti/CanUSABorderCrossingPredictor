@@ -239,3 +239,10 @@ reported_at_utc,port_number,port_name,crossing_name,lane,delay_minutes,lanes_ope
 2026-10-16T12:00:00+00:00,300402,Blaine,Peace Arch,passenger_standard,5,1,no delay,Open,2026-10-17T10:47:06+00:00
 2026-10-16T11:00:00+00:00,300901,Sumas,,passenger_standard,0,1,no delay,Open,2026-10-17T10:47:06+00:00
 2026-10-16T11:00:00+00:00,300901,Sumas,,commercial_standard,0,1,no delay,Open,2026-10-17T10:47:06+00:00
+2026-10-17T13:00:00+00:00,300401,Blaine,Pacific Highway,passenger_standard,5,1,no delay,Open,2026-10-17T14:13:30+00:00
+2026-10-17T13:00:00+00:00,300401,Blaine,Pacific Highway,passenger_nexus_sentri,5,1,no delay,Open,2026-10-17T14:13:30+00:00
+2026-10-17T13:00:00+00:00,300401,Blaine,Pacific Highway,commercial_standard,5,1,no delay,Open,2026-10-17T14:13:30+00:00
+2026-10-17T13:00:00+00:00,300402,Blaine,Peace Arch,passenger_standard,5,1,no delay,Open,2026-10-17T14:13:30+00:00
+2026-10-17T13:00:00+00:00,300402,Blaine,Peace Arch,passenger_nexus_sentri,5,1,no delay,Open,2026-10-17T14:13:30+00:00
+2026-10-17T14:00:00+00:00,300901,Sumas,,passenger_standard,0,1,no delay,Open,2026-10-17T14:13:30+00:00
+2026-10-17T14:00:00+00:00,300901,Sumas,,commercial_standard,0,1,no delay,Open,2026-10-17T14:13:30+00:00
