@@ -341,3 +341,8 @@ reported_at_utc,port_number,port_name,crossing_name,lane,delay_minutes,lanes_ope
 2026-10-19T05:00:00+00:00,302301,Lynden,,commercial_standard,0,1,no delay,Open,2026-10-19T06:17:05+00:00
 2026-10-19T06:00:00+00:00,300901,Sumas,,passenger_standard,0,1,no delay,Open,2026-10-19T06:17:05+00:00
 2026-10-19T06:00:00+00:00,300901,Sumas,,commercial_standard,0,1,no delay,Open,2026-10-19T06:17:05+00:00
+2026-10-19T13:00:00+00:00,300401,Blaine,Pacific Highway,passenger_standard,5,1,no delay,Open,2026-10-19T13:26:40+00:00
+2026-10-19T13:00:00+00:00,300401,Blaine,Pacific Highway,passenger_nexus_sentri,5,1,no delay,Open,2026-10-19T13:26:40+00:00
+2026-10-19T13:00:00+00:00,300401,Blaine,Pacific Highway,commercial_standard,30,3,delay,Open,2026-10-19T13:26:40+00:00
+2026-10-19T13:00:00+00:00,300402,Blaine,Peace Arch,passenger_standard,5,2,no delay,Open,2026-10-19T13:26:40+00:00
+2026-10-19T13:00:00+00:00,300402,Blaine,Peace Arch,passenger_nexus_sentri,5,1,no delay,Open,2026-10-19T13:26:40+00:00
