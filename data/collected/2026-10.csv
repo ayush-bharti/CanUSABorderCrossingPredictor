@@ -406,3 +406,4 @@ reported_at_utc,port_number,port_name,crossing_name,lane,delay_minutes,lanes_ope
 2026-10-21T01:00:00+00:00,302301,Lynden,,passenger_standard,5,1,no delay,Open,2026-10-21T01:36:53+00:00
 2026-10-21T01:00:00+00:00,302301,Lynden,,passenger_nexus_sentri,0,1,no delay,Open,2026-10-21T01:36:53+00:00
 2026-10-21T01:00:00+00:00,302301,Lynden,,commercial_standard,5,1,no delay,Open,2026-10-21T01:36:53+00:00
+2026-10-21T07:00:00+00:00,300402,Blaine,Peace Arch,passenger_standard,20,2,delay,Open,2026-10-21T07:41:13+00:00
