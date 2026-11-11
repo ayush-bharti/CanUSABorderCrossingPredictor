@@ -1,10 +1,14 @@
 """Configuration settings for the border crossing predictor."""
+import os
 from pathlib import Path
 
 # Project paths
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.resolve()
 DATA_DIR = PROJECT_ROOT / "data"
-MODELS_DIR = PROJECT_ROOT / "models"
+LIVE_MODELS_DIR = PROJECT_ROOT / "models"
+# Where models are saved and loaded. BORDER_PREDICTOR_MODELS_DIR points it elsewhere: the scheduled
+# refresh trains into a staging directory this way, leaving the live models in place until they pass checks
+MODELS_DIR = Path(os.environ.get("BORDER_PREDICTOR_MODELS_DIR", LIVE_MODELS_DIR)).resolve()
 
 # Ensure directories exist
 DATA_DIR.mkdir(exist_ok=True)
@@ -153,4 +157,29 @@ GBM_CONFIG = {
         "bagging_freq": 1,
         "seed": 0,
     },
+}
+
+# Scheduled refresh (refresh.py): download the latest data, retrain every lane in parallel into
+# candidate_dir, and move a lane's new models into the live directory only when they pass its checks.
+REFRESH_CONFIG = {
+    "live_dir": LIVE_MODELS_DIR,
+    "candidate_dir": LIVE_MODELS_DIR / "candidate",
+    "previous_dir": LIVE_MODELS_DIR / "previous",  # the models each swap replaced, for rollback
+    # One training process per group; each car lane (with its spike classifier) is paired with a NEXUS lane
+    # so the groups take about as long as each other. Four jobs peak at about 4 GB.
+    "lane_groups": [[4, 11], [3, 9], [5, 6], [13, 14]],
+    "threads_per_job": 3,
+    # A lane's candidate is rejected if its validation MAE is more than this fraction above the live models'
+    "mae_tolerance": 0.02,
+    # Cascade months are downloaded once full; refetch this many back in case a run was missed
+    "cascade_months_back": 3,
+}
+
+# Live accuracy tracking (tracking.py): forecasts logged hourly and scored against what happened
+TRACKING_CONFIG = {
+    "output_dir": DATA_DIR / "tracking",  # forecasts/YYYY-MM.csv and actuals.csv
+    "horizons": [0, 1, 2, 3, 6, 12, 24, 72, 168],
+    # Skip a lane whose latest reading is older than this: its forecast would start in the past
+    "max_staleness_minutes": 90,
+    "report_days": [7, 30],
 }

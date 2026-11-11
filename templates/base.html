@@ -37,6 +37,11 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link {% if request.path == url_for('accuracy') %}active{% endif %}" href="{{ url_for('accuracy') }}">
+                            <i class="fas fa-bullseye"></i> Accuracy
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link {% if request.path == url_for('about') %}active{% endif %}" href="{{ url_for('about') }}">
                             <i class="fas fa-info-circle"></i> About
                         </a>
@@ -69,6 +74,9 @@
                         </li>
                         <li>
                             <a href="{{ url_for('visualize') }}" class="text-dark">Visualize</a>
+                        </li>
+                        <li>
+                            <a href="{{ url_for('accuracy') }}" class="text-dark">Accuracy</a>
                         </li>
                         <li>
                             <a href="{{ url_for('about') }}" class="text-dark">About</a>

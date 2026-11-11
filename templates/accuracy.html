@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Accuracy - Border Crossing Predictor{% endblock %}
+
+{% block content %}
+<div class="card mb-4">
+    <div class="card-header bg-primary text-white">
+        <h4 class="mb-0"><i class="fas fa-bullseye"></i> Live forecast accuracy</h4>
+    </div>
+    <div class="card-body">
+        <p class="text-muted">
+            Each hour the predictor's forecasts for every lane are logged, then compared with the delay Cascade
+            Gateway measured once the hour is over. Error is the mean absolute difference in minutes between the
+            forecast and the hour's mean delay, for the model and for the typical-week baseline it improves on.
+            The 80% range should contain about 80% of actual delays.
+        </p>
+        <div class="btn-group mb-3" role="group" aria-label="Window">
+            {% for w in windows %}
+            <a class="btn btn-sm {% if w == days %}btn-primary{% else %}btn-outline-primary{% endif %}"
+               href="{{ url_for('accuracy', days=w) }}">Last {{ w }} days</a>
+            {% endfor %}
+        </div>
+        {% if not scored %}
+        <div class="alert alert-info"><i class="fas fa-info-circle"></i>
+            No scored forecasts in the last {{ days }} days yet. Forecasts are logged hourly by
+            <code>python -m border_predictor.tracking snapshot</code> and scored once their hour has passed.
+        </div>
+        {% else %}
+        <select class="form-select mb-3" id="lane-select">
+            {% for card in cards %}<option value="{{ loop.index0 }}">{{ card.title }}</option>{% endfor %}
+        </select>
+        <h6>Daily error, forecasts up to 24 hours ahead</h6>
+        <div id="daily" style="height: 300px;"></div>
+        {% for card in cards %}
+        <div class="lane-card mt-3" id="{{ card.id }}" {% if not loop.first %}hidden{% endif %}>
+            <p class="small text-muted mb-2">Models trained {{ card.trained or "unknown" }}</p>
+            {% if card.horizons %}
+            <div class="table-responsive">
+            <table class="table table-sm align-middle">
+                <thead><tr>
+                    <th>Hours ahead</th><th class="text-end">Forecasts</th><th class="text-end">Model error</th>
+                    <th class="text-end">Baseline error</th><th class="text-end">In 80% range</th>
+                    <th class="text-end">Hours over 30 min</th><th class="text-end">Alerts (correct)</th>
+                </tr></thead>
+                <tbody>
+                {% for h in card.horizons %}
+                <tr>
+                    <td>{{ h.horizon }}</td>
+                    <td class="text-end">{{ h.n }}</td>
+                    <td class="text-end {% if h.mae is not none and h.baseline_mae is not none and h.mae < h.baseline_mae %}text-success{% endif %}">{{ h.mae }} min</td>
+                    <td class="text-end">{{ h.baseline_mae }} min</td>
+                    <td class="text-end">{{ h.coverage }}%</td>
+                    <td class="text-end">{{ h.spikes }}</td>
+                    <td class="text-end">{% if h.alerts is none %}—{% else %}{{ h.alerts }} ({{ h.hits }}){% endif %}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <p class="text-muted">No scored forecasts for this lane in the window.</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if scored %}
+<script>
+const cards = {{ cards | tojson }};
+function draw(i) {
+    const d = cards[i].daily;
+    Plotly.newPlot('daily', [
+        {x: d.x, y: d.mae, name: 'Model', mode: 'lines+markers', hovertemplate: '%{x}: %{y:.1f} min<extra>Model</extra>'},
+        {x: d.x, y: d.baseline, name: 'Baseline', mode: 'lines+markers', line: {dash: 'dot'},
+         hovertemplate: '%{x}: %{y:.1f} min<extra>Baseline</extra>'},
+    ], {
+        margin: {t: 10, r: 10, b: 40, l: 50},
+        yaxis: {title: 'min', rangemode: 'tozero'},
+        legend: {orientation: 'h'},
+    }, {responsive: true, displayModeBar: false});
+    document.querySelectorAll('.lane-card').forEach((el, j) => { el.hidden = j !== i; });
+}
+document.getElementById('lane-select').addEventListener('change', e => draw(+e.target.value));
+draw(0);
+</script>
+{% endif %}
+{% endblock %}

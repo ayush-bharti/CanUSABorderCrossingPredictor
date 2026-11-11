@@ -5,8 +5,9 @@ from pathlib import Path
 
 from flask import Flask, abort, jsonify, render_template, request
 
+from border_predictor import tracking
 from border_predictor.config.config import WEB_CONFIG
-from border_predictor.service import Forecaster, Lane, lanes, local_now
+from border_predictor.service import Forecaster, Lane, lanes, local_now, model_version
 
 app = Flask(__name__,
             template_folder=Path(__file__).parent.parent.parent / "templates",
@@ -22,6 +23,7 @@ DAY_TYPE_LABELS = {
 }
 FORECAST_HOURS = 12
 PLAN_DAYS = 14
+ACCURACY_WINDOWS = [7, 30, 90]
 
 
 def lanes_for(direction: str, kind: str) -> List[Lane]:
@@ -115,6 +117,40 @@ def visualize():
     except FileNotFoundError as e:
         error = str(e)
     return render_template("visualize.html", charts=charts, error=error)
+
+
+def number(value, digits: int = 1):
+    """A rounded float for JSON and templates, None for missing values."""
+    return None if value is None or value != value else round(float(value), digits)
+
+
+@app.route("/accuracy")
+def accuracy():
+    """How the logged live forecasts compare with what happened, by lane and horizon."""
+    days = request.args.get("days", 30, type=int)
+    days = days if days in ACCURACY_WINDOWS else 30
+    rows = tracking.recent_scores(days)
+    scores, daily = tracking.score(rows), tracking.daily_mae(rows)
+    cards = []
+    for lane in lanes():
+        title = f"{lane.crossing} — {DIRECTIONS[lane.direction]}, {KINDS[lane.kind]}"
+        lane_scores = scores.xs(lane.lane_id, level="lane") if lane.lane_id in scores.index.get_level_values(0) else None
+        lane_daily = daily[daily.lane == lane.lane_id]
+        cards.append({
+            "id": f"lane-{lane.lane_id}",
+            "title": title,
+            "trained": model_version(lane.lane_id),
+            "horizons": [] if lane_scores is None else [{
+                "horizon": int(h), "n": int(r.n), "mae": number(r.mae), "baseline_mae": number(r.baseline_mae),
+                "coverage": number(r.coverage * 100, 0), "spikes": int(r.spikes),
+                "alerts": None if r.alerts != r.alerts else int(r.alerts),
+                "hits": None if r.hits != r.hits else int(r.hits),
+            } for h, r in lane_scores.iterrows()],
+            "daily": {"x": [day.strftime("%Y-%m-%d") for day in lane_daily.day],
+                      "mae": [number(v, 2) for v in lane_daily.mae],
+                      "baseline": [number(v, 2) for v in lane_daily.baseline_mae]},
+        })
+    return render_template("accuracy.html", cards=cards, days=days, windows=ACCURACY_WINDOWS, scored=len(rows))
 
 
 @app.route("/about")

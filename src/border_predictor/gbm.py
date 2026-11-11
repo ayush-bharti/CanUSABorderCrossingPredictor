@@ -458,18 +458,18 @@ def evaluate_lane(lane_id: int, config: Optional[Dict] = None) -> pd.DataFrame:
     return scores
 
 
-def model_paths(lane_id: int, kind: str = "median") -> List[Path]:
-    """Where each horizon band's LightGBM model of a kind for a lane is stored."""
-    return [Path(BASELINE_CONFIG["model_dir"]) / f"gbm_lane{lane_id}_{kind}_upto{b['up_to']}h.txt"
-            for b in GBM_CONFIG["bands"]]
+def model_paths(lane_id: int, kind: str = "median", model_dir: Optional[Path] = None) -> List[Path]:
+    """Where each horizon band's LightGBM model of a kind for a lane is stored (default: the configured directory)."""
+    model_dir = Path(model_dir or BASELINE_CONFIG["model_dir"])
+    return [model_dir / f"gbm_lane{lane_id}_{kind}_upto{b['up_to']}h.txt" for b in GBM_CONFIG["bands"]]
 
 
-def meta_path(lane_id: int) -> Path:
-    """Where a lane's history weight and spike thresholds are stored."""
-    return Path(BASELINE_CONFIG["model_dir"]) / f"gbm_lane{lane_id}_meta.json"
+def meta_path(lane_id: int, model_dir: Optional[Path] = None) -> Path:
+    """Where a lane's history weight, feature set, validation MAE and spike thresholds are stored."""
+    return Path(model_dir or BASELINE_CONFIG["model_dir"]) / f"gbm_lane{lane_id}_meta.json"
 
 
-def load_models(lane_id: int) -> Optional[Dict]:
+def load_models(lane_id: int, model_dir: Optional[Path] = None) -> Optional[Dict]:
     """
     A lane's saved models: {kind: boosters} for every kind with all bands saved,
     plus "spike_thresholds" when the spike classifier is present. None without
@@ -477,13 +477,13 @@ def load_models(lane_id: int) -> Optional[Dict]:
     """
     models = {}
     for kind in GBM_CONFIG["models"]:
-        paths = model_paths(lane_id, kind)
+        paths = model_paths(lane_id, kind, model_dir)
         if all(p.exists() for p in paths):
             models[kind] = [lgb.Booster(model_file=str(p)) for p in paths]
     if "median" not in models:
         return None
     if "spike" in models:
-        models["spike_thresholds"] = json.loads(meta_path(lane_id).read_text())["spike_thresholds"]
+        models["spike_thresholds"] = json.loads(meta_path(lane_id, model_dir).read_text())["spike_thresholds"]
         if models["spike_thresholds"] is None:
             del models["spike"], models["spike_thresholds"]
     return models
@@ -550,7 +550,9 @@ def train_lane(lane_id: int) -> Dict:
         # A classifier from an earlier training would no longer match: remove it
         for path in model_paths(lane_id, "spike"):
             path.unlink(missing_ok=True)
+    # validation_mae lets the scheduled refresh compare a retrain with the models it would replace
     meta_path(lane_id).write_text(json.dumps({"history_weight": weight, "feature_set": feature_set,
+                                              "validation_mae": feature_mae[feature_set],
                                               "spike_thresholds": thresholds}))
     print(f"{CASCADE_CONFIG['lanes'][lane_id]} (lane {lane_id}): history weight {weight} "
           f"(validation MAE {valid_mae}), feature set {feature_set} (validation MAE {feature_mae}), "
@@ -565,6 +567,15 @@ def recent_inputs(recent: pd.DataFrame, until: pd.Timestamp, origin: pd.Timestam
     return hourly_delay(recent), pd.Series([live], index=[origin])
 
 
+def forecast_origin(recent: pd.DataFrame) -> pd.Timestamp:
+    """
+    The origin a forecast from recent readings starts at: the next hour boundary
+    at or after the poll following the latest reading, as models are trained on
+    origins at hour boundaries.
+    """
+    return (recent.index[-1] + pd.Timedelta(minutes=5)).ceil("H")
+
+
 def forecast(
     recent: pd.DataFrame,
     baseline: BaselinePredictor,
@@ -576,8 +587,7 @@ def forecast(
     """
     Predict the mean delay of each target hour from recent 5-minute readings.
 
-    Models are trained on origins at hour boundaries, so the origin is the next
-    boundary at or after the poll following the latest reading. The live reading
+    The origin is forecast_origin(recent). The live reading
     is the mean of the last three polls, as in training, and the hour in
     progress counts as the last complete hour from what has been polled so far.
     Other lanes are read up to the same poll; a lane missing from others_recent
@@ -598,8 +608,7 @@ def forecast(
         predictions, plus spike_prob and spike_alert when the lane has a
         classifier. Hours before the origin or past the last horizon band are left out.
     """
-    last = recent.index[-1]
-    origin = (last + pd.Timedelta(minutes=5)).ceil("H")
+    last, origin = recent.index[-1], forecast_origin(recent)
     hours = pd.DatetimeIndex(sorted({pd.Timestamp(t).floor("H") for t in targets}))
     horizons = [int(h) for h in (hours - origin) / pd.Timedelta(hours=1) if h >= 0 and band_of(int(h)) is not None]
     columns = ["baseline", "gbm", "low", "high"] + (["spike_prob", "spike_alert"] if "spike" in models else [])

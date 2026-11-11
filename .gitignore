@@ -34,6 +34,9 @@ models/*.joblib
 models/*.json
 models/*.txt
 !models/.gitkeep
+# Scheduled refresh: models being trained, and the ones the last swap replaced
+models/candidate/
+models/previous/
 
 # Environment variables
 .env
@@ -54,3 +57,6 @@ data/cascade/
 # Downloaded weather history
 data/weather/
 data/events/
+
+# Live forecast log and the Cascade delays they are scored against
+data/tracking/
