@@ -469,3 +469,9 @@ reported_at_utc,port_number,port_name,crossing_name,lane,delay_minutes,lanes_ope
 2026-11-20T10:00:00+00:00,300401,Blaine,Pacific Highway,commercial_standard,5,1,no delay,Open,2026-11-20T11:54:00+00:00
 2026-11-19T12:00:00+00:00,300901,Sumas,,passenger_standard,0,1,no delay,Open,2026-11-20T11:54:00+00:00
 2026-11-19T12:00:00+00:00,300901,Sumas,,commercial_standard,0,1,no delay,Open,2026-11-20T11:54:00+00:00
+2026-11-20T20:00:00+00:00,302301,Lynden,,passenger_standard,0,1,no delay,Open,2026-11-20T20:23:09+00:00
+2026-11-20T20:00:00+00:00,302301,Lynden,,passenger_nexus_sentri,0,1,no delay,Open,2026-11-20T20:23:09+00:00
+2026-11-20T20:00:00+00:00,302301,Lynden,,commercial_standard,0,1,no delay,Open,2026-11-20T20:23:09+00:00
+2026-11-20T17:00:00+00:00,300901,Sumas,,passenger_standard,5,1,no delay,Open,2026-11-20T20:23:09+00:00
+2026-11-20T17:00:00+00:00,300901,Sumas,,passenger_nexus_sentri,0,1,no delay,Open,2026-11-20T20:23:09+00:00
+2026-11-20T17:00:00+00:00,300901,Sumas,,commercial_standard,15,1,delay,Open,2026-11-20T20:23:09+00:00
